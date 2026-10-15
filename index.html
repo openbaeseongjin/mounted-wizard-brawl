@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>마상 마법 난투 데모</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+<style>
+:root{--ink:#3a2414;--paper:#f6ead0;--paper2:#efdcb4;--red:#e8483b;--blue:#3d7bff;--gold:#f2c230;--green:#3cbf6a;--shadow:0 4px 0 #2a1608;--bg:#1b130e}
+:root:not([data-theme="light"]){color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#f6ead0}}
+:root[data-theme="dark"]{--paper:#f6ead0}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:"Gowun Dodum","Malgun Gothic",sans-serif;word-break:keep-all;-webkit-user-select:none;user-select:none;touch-action:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hidden{display:none!important}
+/* 게임 전체를 담는 상자. 화면 크기 규칙(@container·cqw)은 이 상자를 기준으로 한다.
+   가로 맞춤(body.rot): 폰 화면이 세로인 채로 상자를 90° 돌려 그린다 → 폰을 왼쪽으로 눕히면 가로 화면 */
+#app{position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;container-type:size}
+body.rot #app{transform-origin:0 0;transform:rotate(90deg)}
+h1,h2,h3,.disp{font-family:"Black Han Sans","Malgun Gothic",sans-serif;font-weight:400;letter-spacing:.5px}
+button{font-family:"Black Han Sans","Malgun Gothic",sans-serif;font-size:18px;border:3px solid var(--ink);border-radius:12px;padding:10px 18px;background:#fff7e6;color:var(--ink);box-shadow:var(--shadow);cursor:pointer;transition:transform .08s}
+button:hover{transform:translateY(-2px)}button:active{transform:translateY(2px);box-shadow:0 1px 0 #2a1608}
+button.primary{background:var(--gold)}button.danger{background:#ffb3a8}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.panel{background:var(--paper);border:4px solid var(--ink);border-radius:18px;box-shadow:0 8px 0 #2a1608,0 18px 40px rgba(0,0,0,.35);padding:18px 22px;max-width:960px;width:100%;max-height:calc(100cqh - 32px);overflow:auto}
+/* 타이틀 */
+#title{flex-direction:column;background:linear-gradient(180deg,rgba(20,12,6,.0),rgba(20,12,6,.55))}
+#title .logo{font-family:"Black Han Sans";font-size:clamp(44px,9cqw,104px);color:#fff7e6;-webkit-text-stroke:3px var(--ink);text-shadow:0 6px 0 var(--ink),0 12px 30px rgba(0,0,0,.4);line-height:1;text-align:center}
+#title .sub{font-family:"Black Han Sans";font-size:clamp(18px,3cqw,28px);color:var(--gold);-webkit-text-stroke:1.5px var(--ink);margin:10px 0 22px;text-align:center}
+#title .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+#title .keys{margin-top:20px;background:rgba(246,234,208,.92);border:3px solid var(--ink);border-radius:14px;padding:10px 16px;max-width:760px;font-size:14px;line-height:1.7}
+kbd{display:inline-block;min-width:24px;padding:0 6px;border:2px solid var(--ink);border-bottom-width:4px;border-radius:6px;background:#fff;font-family:"Black Han Sans";font-size:13px;text-align:center;margin:0 1px}
+#title small{color:#fff7e6;margin-top:12px;text-shadow:0 2px 0 #000;font-size:13px;text-align:center}
+/* 마구간 */
+#hub{justify-content:flex-start}
+#hub .panel{max-width:820px}
+@container (max-width:1100px){#hub{justify-content:center}}
+.hubTop{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:3px dashed rgba(58,36,20,.3);padding-bottom:10px;margin-bottom:12px}
+.hubTop h2{margin:0;font-size:30px}.badge{font-family:"Black Han Sans";background:var(--ink);color:var(--paper);border-radius:999px;padding:4px 12px;font-size:15px}
+.gold{font-family:"Black Han Sans";font-size:20px}.gold:before{content:"🪙 "}
+.bar{flex:1;min-width:160px;height:16px;border:3px solid var(--ink);border-radius:999px;background:#fff;overflow:hidden}.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#ff9a3d)}
+.hubGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.hubCol{display:flex;flex-direction:column;gap:14px}
+@container (max-width:760px){.hubGrid{grid-template-columns:1fr}}
+.card{background:#fff7e6;border:3px solid var(--ink);border-radius:14px;padding:12px}
+.card h3{margin:0 0 8px;font-size:20px}
+.slot{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px}.slot b{width:46px;font-family:"Black Han Sans";font-weight:400}
+.slot select{flex:1;font-family:inherit;font-size:14px;border:2px solid var(--ink);border-radius:8px;padding:4px;background:#fff}
+.tier{font-size:12px;opacity:.75}
+.fightCard{position:relative}.fightCard .opps{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;border:2px solid var(--ink);border-radius:999px;padding:2px 10px 2px 4px;background:#fff}
+.chip i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink);display:inline-block}
+.persona{font-size:13px;line-height:1.5;margin:6px 0;opacity:.9}
+.shop{display:flex;flex-direction:column;gap:6px}.shopItem{display:flex;align-items:center;gap:8px;font-size:14px}.shopItem span{flex:1}.shopItem button{font-size:13px;padding:4px 10px;border-width:2px;box-shadow:0 2px 0 #2a1608}
+.note{font-size:13px;line-height:1.55;opacity:.85}
+.line{background:var(--paper2);border-left:6px solid var(--ink);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:16px}.line b{font-family:"Black Han Sans";font-weight:400;margin-right:6px}
+/* 결과 */
+#result .panel,#pre .panel,#ending .panel,#pause .panel{max-width:640px;text-align:center}
+.bigT{font-family:"Black Han Sans";font-size:56px;margin:4px 0;-webkit-text-stroke:2px var(--ink);color:#fff7e6;text-shadow:0 5px 0 var(--ink)}
+.bigT.win{color:var(--gold)}.bigT.lose{color:#ffb3a8}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.stats div{background:#fff7e6;border:2px solid var(--ink);border-radius:10px;padding:6px;font-size:13px}.stats b{display:block;font-family:"Black Han Sans";font-size:24px;font-weight:400}
+.loot{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:10px 0}.loot button{font-size:15px}
+.btnRow{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;font-family:"Black Han Sans","Malgun Gothic",sans-serif}
+#cross{position:absolute;left:50%;top:50%;width:120px;height:120px;transform:translate(-50%,-50%)}
+#cross .dot{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
+/* 위: 피통 + 그 아래 작은 위험 자막 */
+#topbar{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;max-width:calc(100cqw - 420px)}
+#chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.fchip{display:grid;grid-template-columns:auto 1fr auto;align-items:center;column-gap:6px;row-gap:3px;width:176px;padding:5px 9px 6px;border:3px solid #1b130e;border-radius:12px;background:rgba(246,234,208,.94);color:var(--ink);font-size:14px;transition:opacity .3s,transform .15s}
+.fchip.me{width:206px;background:#fff7e6;box-shadow:0 0 0 2px var(--gold)}
+.fchip i{width:14px;height:14px;border-radius:50%;border:2px solid #1b130e}.fchip .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fchip .st{font-size:14px}
+.fchip .hp{grid-column:1/4;position:relative;height:11px;border:2px solid #1b130e;border-radius:6px;background:#3a2414;overflow:hidden}
+.fchip .hp b,.fchip .hp u{position:absolute;left:0;top:0;bottom:0;display:block}
+.fchip .hp u{background:#fff;transition:width .5s ease-in .25s}.fchip .hp b{transition:width .08s}
+.fchip .hp em{position:absolute;right:4px;top:0;line-height:11px;font-style:normal;font-size:10px;color:#fff;text-shadow:0 1px 0 #000}
+.fchip.out{opacity:.4}.fchip.out .nm{text-decoration:line-through}
+.fchip.hit{transform:scale(1.07)}.fchip.low .hp b{animation:lowhp .6s infinite}
+@keyframes lowhp{50%{filter:brightness(1.8)}}
+#alerts{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;font-family:"Gowun Dodum","Malgun Gothic",sans-serif;font-weight:700}
+#alerts span{font-size:13px;padding:2px 9px;border-radius:999px;border:2px solid #1b130e;background:rgba(27,19,14,.78);color:#fff7e6;white-space:nowrap}
+#alerts span.r{background:rgba(214,48,36,.9)}#alerts span.o{background:rgba(214,130,20,.9)}#alerts span.y{background:rgba(242,194,48,.92);color:#1b130e}
+#alerts span.r{animation:pulse .7s infinite}@keyframes pulse{50%{filter:brightness(1.35)}}
+/* 맞힘 표시 */
+#hitmark{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}
+#hitmark i{position:absolute;width:3px;height:11px;background:#fff;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.6);left:-1.5px;top:-5.5px}
+#hitmark i:nth-child(1){transform:rotate(45deg) translateY(-13px)}#hitmark i:nth-child(2){transform:rotate(135deg) translateY(-13px)}#hitmark i:nth-child(3){transform:rotate(225deg) translateY(-13px)}#hitmark i:nth-child(4){transform:rotate(315deg) translateY(-13px)}
+#hitmark.on{animation:hm .28s ease-out}#hitmark.head i{background:#ffd34d}#hitmark.kill i{background:#ff4a3a;height:15px}
+@keyframes hm{0%{opacity:1;transform:scale(1.5)}100%{opacity:0;transform:scale(1)}}
+#dmgDir{position:absolute;left:50%;top:50%;width:220px;height:220px;margin:-110px;border-radius:50%;border-top:8px solid rgba(255,45,30,.85);opacity:0;filter:drop-shadow(0 0 6px rgba(255,40,30,.8))}
+/* 머리 위 피통 · 피해 숫자 */
+.ohb{position:absolute;width:74px;margin-left:-37px;transition:opacity .25s}
+.ohb .obar{position:relative;height:8px;border:2px solid #1b130e;border-radius:5px;background:#3a2414;overflow:hidden}
+.ohb .obar b,.ohb .obar u{position:absolute;left:0;top:0;bottom:0;display:block}.ohb .obar u{background:#fff;transition:width .5s ease-in .25s}
+.ohb small{display:block;text-align:center;font-size:11px;color:#fff7e6;text-shadow:0 1px 0 #000,0 0 3px #000;white-space:nowrap}
+.dmg{position:absolute;font-family:"Black Han Sans","Malgun Gothic",sans-serif;color:#fff;-webkit-text-stroke:1.5px #1b130e;text-shadow:0 2px 0 #1b130e;white-space:nowrap;pointer-events:none;transform:translate(-50%,-50%)}
+.dmg.head{color:#ffd34d}.dmg.big{color:#ff7a5a}.dmg.me{color:#ff5a4a}.dmg.minor{color:#d8cdbd}
+#timer{position:absolute;top:10px;left:12px;color:#fff7e6;font-size:22px;background:rgba(27,19,14,.62);border-radius:12px;padding:4px 12px}#timer small{display:block;font-size:13px;color:var(--gold)}
+#feed{position:absolute;top:118px;right:14px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+#feed div{background:rgba(27,19,14,.75);color:#fff7e6;padding:4px 10px;border-radius:8px;font-size:15px;animation:feedIn .25s}
+@keyframes feedIn{from{transform:translateX(30px);opacity:0}}
+#speedo{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(27,19,14,.72);color:#fff7e6;padding:6px 16px;border-radius:14px;font-size:16px}
+#speedo .gait{font-size:22px;color:var(--gold);min-width:56px;text-align:center}#speedo .mana{color:#9fe8ff}#speedo .fear{font-size:14px}
+#toast{position:absolute;left:50%;bottom:136px;transform:translateX(-50%);background:rgba(246,234,208,.95);color:var(--ink);border:3px solid #1b130e;border-radius:12px;padding:8px 16px;font-family:"Gowun Dodum";font-weight:700;font-size:17px;max-width:min(680px,90cqw);text-align:center;transition:opacity .3s}
+#center{position:absolute;left:50%;top:32%;transform:translate(-50%,-50%);font-size:clamp(40px,8cqw,96px);color:#fff7e6;-webkit-text-stroke:3px #1b130e;text-shadow:0 6px 0 #1b130e;white-space:nowrap}
+#center.pop{animation:pop .45s}@keyframes pop{0%{transform:translate(-50%,-50%) scale(.4)}60%{transform:translate(-50%,-50%) scale(1.15)}100%{transform:translate(-50%,-50%) scale(1)}}
+#arrows .arw{position:absolute;width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:26px solid #fff;filter:drop-shadow(0 0 2px #000)}
+#warn{position:absolute;inset:0;opacity:0;transition:opacity .15s}
+#vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(40,0,0,.65) 100%);opacity:0}
+#flash{position:absolute;inset:0;background:#ff3b2f;opacity:0}
+#speedlines{position:absolute;inset:0;width:100%;height:100%}
+#mountHint{position:absolute;left:50%;top:62%;transform:translateX(-50%);color:#fff7e6;font-size:22px;text-shadow:0 2px 0 #000;text-align:center}
+#mountHint small{display:block;font-family:"Gowun Dodum";font-weight:700;font-size:15px;color:var(--gold)}
+#legend{position:absolute;right:12px;bottom:12px;background:rgba(27,19,14,.6);color:#fff7e6;border-radius:10px;padding:6px 10px;font-family:"Gowun Dodum";font-size:12px;line-height:1.7}
+#legend kbd{border-color:#fff7e6;background:transparent;color:#fff7e6;font-size:11px;min-width:18px}
+#modeTag{position:absolute;left:50%;top:calc(50% + 62px);transform:translateX(-50%);color:#fff7e6;font-size:16px;text-shadow:0 2px 0 #000;white-space:nowrap}
+#weaponHint{position:absolute;left:50%;top:70%;transform:translateX(-50%);background:rgba(27,19,14,.72);color:#fff7e6;border-radius:12px;padding:6px 14px;font-size:18px;text-align:center}
+#weaponHint small{display:block;font-family:"Gowun Dodum";font-weight:700;font-size:13px;color:var(--gold)}
+#replayTag{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--red);color:#fff7e6;border:3px solid #1b130e;border-radius:12px;padding:4px 16px;font-size:24px;animation:blink 1s infinite}
+#replayTag small{font-family:"Gowun Dodum";font-weight:700;font-size:13px;margin-left:8px}
+@keyframes blink{50%{opacity:.75}}
+#practice{position:absolute;left:12px;top:80px;background:rgba(246,234,208,.92);color:var(--ink);border:3px solid #1b130e;border-radius:12px;padding:8px 12px;font-size:15px;max-width:300px}
+#practice small{display:block;font-family:"Gowun Dodum";font-size:12px;opacity:.8}
+#practice ul{margin:6px 0 0;padding:0;list-style:none;font-family:"Gowun Dodum";font-weight:700;font-size:13px;line-height:1.7}
+#practice li:before{content:"☐ "}#practice li.done{opacity:.45;text-decoration:line-through}#practice li.done:before{content:"✔ "}
+.setRow{display:grid;grid-template-columns:120px 1fr 56px;align-items:center;gap:10px;margin:8px 0;font-size:15px;text-align:left}
+.setRow input[type=range]{width:100%}
+.picker{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0}
+.picker label{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--ink);border-radius:999px;padding:4px 12px;background:#fff7e6;cursor:pointer;font-size:14px}
+.picker input{accent-color:var(--ink)}
+#aimWarn{position:absolute;left:50%;top:18%;transform:translateX(-50%);color:#ff5a4a;font-size:24px;-webkit-text-stroke:1.5px #1b130e;opacity:0;transition:opacity .2s}
+/* 터치 */
+#touch{position:fixed;inset:0;z-index:12;pointer-events:none}
+#touch .tb{position:absolute;pointer-events:auto;width:64px;height:64px;border-radius:50%;border:3px solid #fff7e6;background:rgba(27,19,14,.45);color:#fff7e6;font-family:"Black Han Sans";font-size:15px;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.05}
+#touch .tb.on{background:rgba(242,194,48,.75);color:var(--ink)}
+#touch .tb.big{width:80px;height:80px}#touch .tb.sm{width:50px;height:50px;font-size:13px}
+#stick{position:absolute;left:max(20px,env(safe-area-inset-left,0px));bottom:20px;width:126px;height:126px;border-radius:50%;border:3px solid rgba(255,247,230,.6);background:rgba(27,19,14,.25);pointer-events:auto;touch-action:none}
+#stick i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px;border-radius:50%;background:rgba(255,247,230,.75)}
+#touch .tb{touch-action:none}
+/* 터치 버튼 자리 (가로 기본) */
+#tbCast{right:20px;bottom:108px}#tbSwing{right:108px;bottom:22px}#tbDuck{right:28px;bottom:24px}
+#tbThrust{right:112px;bottom:118px}#tbMount{right:192px;bottom:118px}#tbGrab{right:196px;bottom:30px}#tbRun{left:164px;bottom:24px}
+#tbView{right:20px;top:108px}#tbLock{right:78px;top:108px}#tbPause{left:10px;top:108px}
+/* 쉬운 조작(body.simple): 휘두르기(가장 큼) · 마법 · 피하기만. 금색이면 버튼도 빛난다 */
+body.simple #touch #tbThrust,body.simple #touch #tbGrab,body.simple #touch #tbRun,body.simple #touch #tbMount,body.simple #touch #tbLock{display:none}
+body.simple #touch #tbSwing{right:22px;bottom:22px;width:100px;height:100px;font-size:18px}
+body.simple #touch #tbCast{right:134px;bottom:58px;width:86px;height:86px;font-size:17px}
+body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-size:14px}
+#touch .tb.gold{background:rgba(242,194,48,.95);color:#1b130e;border-color:#fff;box-shadow:0 0 0 4px rgba(255,211,77,.55),0 0 26px rgba(255,211,77,.9)}
+#touch .tb.off{opacity:.38}
+/* 표적 조준선: 네 귀퉁이가 줄어들다가 금색이 되면 떼는 때 */
+#tgt{position:absolute;left:0;top:0;width:110px;height:110px;color:rgba(255,247,230,.6);pointer-events:none;transition:width .07s,height .07s,margin .07s}
+#tgt i{position:absolute;width:30%;height:30%;border:3px solid currentColor;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6))}
+#tgt i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:6px 0 0 0}#tgt i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 6px 0 0}
+#tgt i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-radius:0 0 0 6px}#tgt i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-radius:0 0 6px 0}
+#tgt.arm,#tgt.charge{color:#8fe8ff}#tgt.gold{color:#ffd34d}#tgt.gold i{border-width:4px;filter:drop-shadow(0 0 6px rgba(255,211,77,.9))}
+#tgt b{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:4px;font:400 15px "Black Han Sans";color:#ffd34d;-webkit-text-stroke:1px #1b130e;white-space:nowrap}
+/* 폰 세로: 피통 두 줄, 버튼은 오른쪽 아래 모음, 정보는 작게 */
+@container (orientation:portrait) and (max-width:700px){
+  #topbar{top:4px;left:6px;right:6px;transform:none;max-width:none;gap:4px}
+  #chips{gap:4px}.fchip,.fchip.me{width:calc(50cqw - 10px);font-size:11px;padding:2px 6px 4px;border-width:2px;row-gap:2px}.fchip .hp{height:10px}.fchip .hp em{font-size:9px;line-height:10px}
+  #alerts span{font-size:11px;padding:1px 7px}
+  #timer{top:auto;bottom:160px;left:auto;right:8px;font-size:14px;padding:2px 8px}#timer small{display:none}
+  #feed{top:calc(var(--topH,96px) + 40px);right:8px;max-width:38cqw}#feed div{font-size:11px;padding:2px 7px}
+  #speedo{bottom:auto;top:calc(var(--topH,96px) + 6px);font-size:11px;gap:6px;padding:3px 9px;max-width:calc(100cqw - 16px)}#speedo .gait{font-size:14px;min-width:0}#speedo .fear{display:none}
+  #toast{bottom:270px;font-size:13px;max-width:88cqw;padding:6px 10px}
+  #weaponHint,#mountHint{top:auto;bottom:330px;font-size:14px}#modeTag{font-size:12px;top:calc(50% + 50px)}
+  #cross{transform:translate(-50%,-50%) scale(.8)}
+  #practice{top:calc(var(--topH,96px) + 40px);left:6px;max-width:60cqw;font-size:12px;padding:4px 8px}#practice small{display:none}#practice ul{font-size:11px;line-height:1.5;margin-top:2px}
+  /* 세로에서는 아직 안 한 것 3개만 */
+  #practice li.done,#practice li:not(.done)~li:not(.done)~li:not(.done)~li:not(.done){display:none}
+  #replayTag{font-size:15px;top:auto;bottom:170px}
+  #stick{width:108px;height:108px;left:10px;bottom:12px}#stick i{width:46px;height:46px;margin:-23px}
+  #touch .tb{width:56px;height:56px;font-size:12px}#touch .tb.big{width:68px;height:68px}#touch .tb.sm{width:42px;height:42px;font-size:12px}
+  #tbCast{right:8px;bottom:80px}#tbSwing{right:82px;bottom:10px}#tbDuck{right:12px;bottom:12px}
+  #tbThrust{right:86px;bottom:86px}#tbMount{right:150px;bottom:86px}#tbGrab{right:156px;bottom:12px}#tbRun{left:10px;bottom:128px;width:48px;height:48px}
+  #tbView{right:8px;top:auto;bottom:216px}#tbLock{right:56px;top:auto;bottom:216px}#tbPause{left:8px;top:auto;bottom:186px}
+  body.simple #touch #tbSwing{right:10px;bottom:14px;width:88px;height:88px;font-size:16px}
+  body.simple #touch #tbCast{right:106px;bottom:42px;width:74px;height:74px;font-size:15px}
+  body.simple #touch #tbDuck{right:24px;bottom:104px;width:52px;height:52px;font-size:12px}
+  #tgt b{font-size:13px}
+}
+/* 폰 가로(높이가 낮음): 전부 작게 */
+@container (max-height:500px) and (orientation:landscape){
+  #topbar{top:4px;gap:3px}.fchip{width:136px;font-size:11px;padding:2px 6px 3px;border-width:2px;row-gap:2px}.fchip.me{width:150px}.fchip .hp{height:10px}.fchip .hp em{font-size:9px;line-height:10px}
+  #alerts span{font-size:11px;padding:1px 7px}
+  #timer{font-size:14px;padding:2px 8px}#timer small{font-size:10px}
+  #speedo{bottom:6px;font-size:12px;padding:3px 10px;gap:8px}#speedo .gait{font-size:15px;min-width:0}#speedo .fear{display:none}
+  #feed{top:64px}#feed div{font-size:12px;padding:3px 8px}
+  #toast{bottom:52px;font-size:13px;padding:5px 10px}
+  #practice{top:108px;left:8px;font-size:12px;max-width:190px;padding:4px 8px}#practice small{display:none}#practice ul{font-size:11px;line-height:1.45;margin-top:2px}
+  #practice li.done,#practice li:not(.done)~li:not(.done)~li:not(.done)~li:not(.done){display:none}
+  #stick{width:100px;height:100px;left:max(12px,env(safe-area-inset-left,0px));bottom:10px}#stick i{width:42px;height:42px;margin:-21px}
+  #touch .tb{width:52px;height:52px;font-size:11px}#touch .tb.big{width:62px;height:62px}#touch .tb.sm{width:40px;height:40px;font-size:11px}
+  #tbCast{right:12px;bottom:72px}#tbSwing{right:80px;bottom:8px}#tbDuck{right:14px;bottom:10px}
+  #tbThrust{right:84px;bottom:76px}#tbMount{right:142px;bottom:76px}#tbGrab{right:146px;bottom:10px}#tbRun{left:120px;bottom:10px}
+  #tbView{right:12px;top:60px}#tbLock{right:58px;top:60px}#tbPause{left:8px;top:60px}
+  body.simple #touch #tbSwing{right:12px;bottom:10px;width:80px;height:80px;font-size:15px}
+  body.simple #touch #tbCast{right:102px;bottom:30px;width:68px;height:68px;font-size:14px}
+  body.simple #touch #tbDuck{right:22px;bottom:98px;width:50px;height:50px;font-size:11px}
+  body.simple #toast{bottom:auto;top:calc(var(--topH,96px) + 6px)}
+  #tgt b{font-size:13px}
+}
+#boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff7e6;font-family:"Black Han Sans";font-size:24px;z-index:60;background:var(--bg)}
+#error{position:fixed;left:10px;right:10px;bottom:10px;background:#300;color:#fdd;font:12px monospace;padding:8px;white-space:pre-wrap;z-index:70;display:none;max-height:40vh;overflow:auto}#error.show{display:block}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <canvas id="speedlines"></canvas>
+  <div id="vignette"></div><div id="flash"></div><div id="warn"></div>
+  <div id="arrows"></div>
+  <div id="tgt" class="hidden"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="cross"><svg viewBox="0 0 120 120" width="120" height="120">
+    <circle cx="60" cy="60" r="44" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="4"/>
+    <circle id="stamArc" cx="60" cy="60" r="44" fill="none" stroke="#9be37a" stroke-width="3" stroke-linecap="round" stroke-dasharray="276 999" transform="rotate(90 60 60)" opacity=".85"/>
+    <circle cx="60" cy="60" r="34" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="7"/>
+    <circle id="manaArc" cx="60" cy="60" r="34" fill="none" stroke="#9fe8ff" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 999" transform="rotate(-90 60 60)"/>
+    <circle id="chargeArc" cx="60" cy="60" r="26" fill="none" stroke="#ffd34d" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 999" transform="rotate(-90 60 60)"/>
+    <line id="ghost" x1="60" y1="20" x2="60" y2="30" stroke="#ff5a4a" stroke-width="4" stroke-linecap="round" opacity="0"/>
+  </svg><div class="dot"></div><div id="hitmark"><i></i><i></i><i></i><i></i></div></div>
+  <div id="dmgDir"></div>
+  <div id="ohb"></div>
+  <div id="dmgNums"></div>
+  <div id="topbar"><div id="chips"></div><div id="alerts"></div></div>
+  <div id="timer">0:00<small></small></div>
+  <div id="feed"></div>
+  <div id="center"></div>
+  <div id="mountHint" class="hidden"></div>
+  <div id="modeTag"></div>
+  <div id="weaponHint" class="hidden"></div>
+  <div id="replayTag" class="hidden">▶ 다시 보기 <small>클릭하거나 Space를 누르면 넘긴다</small></div>
+  <div id="practice" class="hidden"><b>연습장</b><small>해 보면 지워진다 · Esc로 끝내기</small><ul id="practiceList"></ul></div>
+  <div id="toast" style="opacity:0"></div>
+  <div id="speedo"><span class="gait">정지</span><span class="spd">0.0 m/s</span><span class="mana">마력 0</span><span class="fear"></span></div>
+  <div id="legend"><kbd>W</kbd><kbd>S</kbd> 박차·고삐 <kbd>A</kbd><kbd>D</kbd> 조향 <kbd>Shift</kbd> 질주(말의 숨)<br>좌클릭 누른 채 마우스 = 휘두르기 · 우클릭 누르기→떼기 = 마법<br><kbd>C</kbd> 누른 채 마우스 앞뒤 = 찌르기 · <kbd>Q</kbd> 누르고 있기 = 잡기<br><kbd>E</kbd> 말 타기·줍기 (휘두르는 중이면 던지기) · <kbd>Space</kbd> 숙이기 / 걸을 땐 발차기<br><kbd>Z</kbd> 표적 고정 <kbd>V</kbd> 시점 <kbd>F</kbd> 슬로 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기</div>
+</div>
+
+<section id="title" class="screen hidden">
+  <div class="logo">마상 마법 난투</div>
+  <div class="sub">말의 속도가 곧 마력이다</div>
+  <div class="row"><button id="startBtn" class="primary">🐴 건틀릿 (마구간)</button><button id="freeBtn">⚔ 자유 대전</button><button id="practiceBtn">🎯 연습장</button><button id="setBtn1">⚙ 설정</button></div>
+  <div class="keys">
+    <b>하프소드식 물리 결투, 말 위에서.</b> 맞으면 위의 피통(정신)이 깎이고 0이면 기절. 몸이 기울면 말에서 떨어진다.<br>
+    <kbd>W</kbd> 달리면 지팡이 끝이 밝아진다 = 마력 · <b>우클릭 누르기 → 떼기</b> 발사, 쏜 만큼 느려진다<br>
+    <b>좌클릭 누른 채 마우스</b> 휘두르기 · <kbd>C</kbd> 찌르기 · <kbd>Q</kbd> 잡아 끌어내리기 · <kbd>E</kbd> 줍기·던지기·다시 타기 · 걸을 땐 <kbd>Space</kbd> 발차기<br>
+    처음이면 <b>연습장</b>에서 가만히 있는 허수아비로 동작을 하나씩 해 보세요.
+  </div>
+  <small>데모 v0.2 · PC + 마우스 권장 (폰은 가로로) · 그래픽·소리는 모두 코드로 만든 임시판</small>
+</section>
+
+<section id="hub" class="screen hidden"><div class="panel">
+  <div class="hubTop"><h2>🐴 마구간</h2><span class="badge" id="rankBadge"></span><div class="bar" title="랭크 결정전까지"><i id="rankBar" style="width:0%"></i></div><span id="rankPts" class="note"></span><span class="gold" id="goldTxt">0</span></div>
+  <div class="hubGrid">
+    <div class="hubCol"><div class="card"><h3>마지와 고집이</h3>
+      <div class="note" id="hubStory">낙마만 일곱 번 한 견습 마법사 마지와 늙은 회색 암말 고집이. 봄 마상 대난투의 상금이 목장 빚이다.</div>
+      <div id="slots"></div>
+      <div class="note" id="tierNote"></div>
+    </div>
+    <div class="card"><h3>상점</h3><div class="shop" id="shop"></div>
+      <div class="note" style="margin-top:8px">하프소드 규칙: 낮은 등급 장비로 이길수록 포인트가 많다. 기절로 지면 가장 비싼 장비를 압수당하고, <kbd>G</kbd> 항복하면 잃는 건 없다.</div>
+      <div class="btnRow"><button id="resetBtn" style="font-size:13px;padding:6px 10px">처음부터</button><button id="muteBtn" style="font-size:13px;padding:6px 10px">🔊 소리</button><button id="setBtn2" style="font-size:13px;padding:6px 10px">⚙ 설정</button><button id="titleBtn" style="font-size:13px;padding:6px 10px">처음 화면</button></div>
+    </div></div>
+    <div class="card fightCard"><h3 id="nextTitle"></h3>
+      <div class="opps" id="nextOpps"></div><div class="persona" id="nextPersona"></div>
+      <div class="note" id="nextPts"></div>
+      <div class="btnRow"><button id="fightBtn" class="primary">⚔ 시합 시작</button></div>
+      <hr style="border:none;border-top:3px dashed rgba(58,36,20,.3);margin:14px 0">
+      <h3 id="bossTitle"></h3><div class="persona" id="bossPersona"></div>
+      <div class="btnRow"><button id="bossBtn" class="danger">👑 결정전</button></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="pre" class="screen hidden"><div class="panel">
+  <div class="badge" id="preMode"></div>
+  <h2 id="preTitle" style="font-size:32px;margin:10px 0"></h2>
+  <div class="opps" id="preOpps" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+  <div class="line" id="preLine"></div>
+  <div class="note" id="preTip"></div>
+  <div class="btnRow"><button id="goBtn" class="primary">▶ 시작 (클릭하면 마우스가 잠긴다)</button><button id="backBtn">마구간으로</button></div>
+</div></section>
+
+<section id="result" class="screen hidden"><div class="panel">
+  <div class="bigT" id="resT"></div><div id="resSub" class="note" style="font-size:16px"></div>
+  <div class="stats" id="resStats"></div>
+  <div id="resRewards" class="line" style="text-align:left"></div>
+  <div id="lootBox" class="hidden"><h3 style="margin:6px 0">전리품 하나 고르기</h3><div class="loot" id="loot"></div></div>
+  <div class="btnRow"><button id="resHub" class="primary">마구간으로</button><button id="resRetry">한 판 더</button></div>
+</div></section>
+
+<section id="ending" class="screen hidden"><div class="panel">
+  <div class="bigT win" id="endT"></div><p id="endBody" style="font-size:17px;line-height:1.7"></p>
+  <div class="btnRow"><button id="endHub" class="primary">마구간으로 (자유 시합)</button></div>
+  <div class="note" style="margin-top:12px">데모는 여기까지입니다. 고마워요! — 하프소드(Half Sword)의 물리 결투 문법을 빌려 만든 팀 데모</div>
+</div></section>
+
+<section id="pause" class="screen hidden"><div class="panel">
+  <h2 style="font-size:34px;margin:4px 0">잠깐 멈춤</h2>
+  <div class="note" id="pauseNote">화면을 클릭하면 계속합니다. 마우스가 잠겨야 시점이 돌아갑니다.</div>
+  <div class="btnRow"><button id="resumeBtn" class="primary">계속</button><button id="giveBtn" class="danger">🏳 항복 (잃는 것 없음)</button><button id="setBtn3">⚙ 설정</button><button id="orientBtn" class="hidden">📱 세로로 보기</button></div>
+</div></section>
+
+<section id="settings" class="screen hidden"><div class="panel">
+  <h2 style="font-size:32px;margin:4px 0">설정</h2>
+  <div class="setRow"><label for="sSens">마우스 감도</label><input id="sSens" type="range" min="0.3" max="3" step="0.05"><span id="vSens"></span></div>
+  <div class="setRow"><label for="sSwing">휘두르기 감도</label><input id="sSwing" type="range" min="0.3" max="3" step="0.05"><span id="vSwing"></span></div>
+  <div class="setRow"><label for="sFov">시야각</label><input id="sFov" type="range" min="60" max="100" step="1"><span id="vFov"></span></div>
+  <div class="setRow"><label for="sVol">소리 크기</label><input id="sVol" type="range" min="0" max="1" step="0.05"><span id="vVol"></span></div>
+  <div class="setRow"><label for="sInv">상하 반전</label><input id="sInv" type="checkbox" style="justify-self:start"><span></span></div>
+  <div class="setRow"><label for="sReplay">낙마 다시 보기</label><input id="sReplay" type="checkbox" style="justify-self:start"><span></span></div>
+  <div class="setRow"><label for="sAdv">고급 조작</label><input id="sAdv" type="checkbox" style="justify-self:start"><span style="font-size:12px;opacity:.8">하프소드식: 마우스로 직접 휘두르기 · 찌르기(C) · 잡기(Q) · 던지기</span></div>
+  <div class="setRow"><label for="sShadow">그림자</label><select id="sShadow" style="font-family:inherit;font-size:14px;border:2px solid var(--ink);border-radius:8px;padding:3px"><option value="high">선명하게</option><option value="low">가볍게</option><option value="off">끄기</option></select><span></span></div>
+  <div class="note">설정은 이 브라우저에만 저장됩니다.</div>
+  <div class="btnRow"><button id="setDone" class="primary">닫기</button></div>
+</div></section>
+
+<section id="free" class="screen hidden"><div class="panel">
+  <h2 style="font-size:32px;margin:4px 0">⚔ 자유 대전</h2>
+  <div class="note">보상 없는 시합. 장비는 전부 쓸 수 있다.</div>
+  <h3 style="margin:10px 0 4px">상대 (1~3명)</h3><div class="picker" id="freeOpps"></div>
+  <h3 style="margin:10px 0 4px">내 장비</h3><div class="picker" id="freeGear"></div>
+  <div class="btnRow"><button id="freeGo" class="primary">▶ 시작</button><button id="freeBack">뒤로</button></div>
+</div></section>
+
+<div id="touch" class="hidden">
+  <div id="stick"><i></i></div>
+  <div class="tb big" id="tbCast">마법<br>(누르기)</div>
+  <div class="tb big" id="tbSwing">휘두르기<br>(누른 채<br>드래그)</div>
+  <div class="tb" id="tbDuck">숙이기<br>발차기</div>
+  <div class="tb" id="tbThrust">찌르기</div>
+  <div class="tb" id="tbGrab">잡기</div>
+  <div class="tb" id="tbRun">질주</div>
+  <div class="tb" id="tbMount">타기<br>줍기</div>
+  <div class="tb sm" id="tbView">시점</div>
+  <div class="tb sm" id="tbLock">고정</div>
+  <div class="tb sm" id="tbPause">⏸</div>
+</div>
+<section id="rotateTip" class="screen hidden"><div class="panel" style="max-width:440px;text-align:center">
+  <div style="font-size:46px;line-height:1">📱↻</div>
+  <h2 id="rotT" style="font-size:26px;margin:8px 0">가로로 하면 더 넓게 보여요</h2>
+  <div class="note">가로를 고르면 폰 자동 회전이 안 되는 곳(카톡 안 브라우저 등)에서도 게임이 옆으로 돌아가요. 폰 <b>윗부분이 왼쪽으로 가게 눕혀서</b> 하세요.</div>
+  <div class="btnRow"><button id="rotFull" class="primary">↻ 가로로 하기</button><button id="rotStay">세로로 그대로 하기</button></div>
+  <div class="note" style="margin-top:6px">나중에 ⏸ 메뉴에서 바꿀 수 있어요.</div>
+</div></section>
+</div>
+<div id="boot">마구간 문을 여는 중…</div>
+<div id="error"></div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

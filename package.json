@@ -1,0 +1,7 @@
+{
+  "name": "mw-demo",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" },
+  "devDependencies": { "@dimforge/rapier3d-compat": "0.21.0" }
+}

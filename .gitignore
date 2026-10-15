@@ -1,0 +1,5 @@
+node_modules/
+.omc/
+test/_*.mjs
+__pycache__/
+*.log
