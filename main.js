@@ -26,7 +26,7 @@ catch (e) { $('boot').textContent = '물리 엔진(Rapier)을 못 불러왔어�
 
 // ---------- 설정 (이 브라우저에만) ----------
 const SET_KEY = 'mw-demo-settings-v1';
-const DEFAULTS = { sens: 1, swing: 1, fov: 76, vol: 0.85, inv: false, replay: true, shadow: 'high', orient: '', adv: false };   // adv: 고급 조작(하프소드식). 기본은 쉬운 조작   // orient: 폰 화면 방향 ('' 아직 안 고름 · 'land' 가로 · 'port' 세로)
+const DEFAULTS = { sens: 1, swing: 1, fov: 76, sway: 1, vol: 0.85, inv: false, replay: true, shadow: 'high', orient: '', adv: false };   // adv: 고급 조작(하프소드식). 기본은 쉬운 조작   // orient: 폰 화면 방향 ('' 아직 안 고름 · 'land' 가로 · 'port' 세로)
 let S = { ...DEFAULTS }, hadSettings = false;
 try { const s = localStorage.getItem(SET_KEY); if (s) { S = { ...DEFAULTS, ...JSON.parse(s) }; hadSettings = true; } } catch (e) { /* 기본값 */ }
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(S)); } catch (e) { /* 저장 못 해도 계속 */ } }
@@ -85,6 +85,9 @@ const PERSONA_TXT = {
   rival: '네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.',
   still: '가만히 있는 연습 과녁.',
 };
+const VERSION = 'v0.3b';   // 시험 기록에 같이 적는다
+// 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
+let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -97,13 +100,38 @@ const MAX_FRAMES = 300;
 let replay = null, pendingReplay = null, replayCd = 0, lastBig = null;
 const bumpsGrowing = [];
 function clearVisuals() { fx.clear(); disposeVisuals(scene, vis); vis = null; bumpsGrowing.length = 0; }
-function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); player = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
+function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); player = null; cam.swP = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
 
 // ---------- 카메라 ----------
-const cam = { pos: V(0, 3, -10), shake: 0, fovKick: 0, cineAng: 0, focus: V() };
+const cam = { pos: V(0, 3, -10), shake: 0, fovKick: 0, cineAng: 0, focus: V(), swP: null, swY: 0, swW: null };   // swP·swY·swW: 몸 흔들림 기준 (bodySway)
 const ctl = { yaw: 0, pitch: 0, hand: [0.5, 0.1], swinging: false, mountReq: false, kickReq: false, reach: 0, lock: -1, gHold: 0, surrender: false, prevState: 'mounted', manualT: 9 };
 let assist = null;   // 쉬운 조작 (assist.js)
-const _q = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _tf = new THREE.Vector3();
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// 몸이 실제로 흔들린 만큼 1인칭 시야도 따라간다 (하프소드식). 몸이 '있어야 할' 자세(질주 기울기·숙이기·찌르기 기울기,
+// 조준 쪽으로 돌린 몸통)와 실제 자세의 차이만 쓰고, 그중에서도 반 박자 늦게 따라오는 기준을 빼서 순간 흔들림만 남긴다.
+// 실측(시뮬): 크게 휘두르기 1~3°, 철퇴 스침 약 3°, 말끼리 부딪히면 수십 ° → 최대 ±0.35 rad로 자른다
+const _wu = new THREE.Vector3(), _cf = new THREE.Vector3();
+function bodySway(dt, tq, up, refYaw, yaw, fb, speed) {
+  const inp = match && player ? match.fighters[player.i].input : null, RC = CFG.rider;
+  _tf.set(0, 0, 1).applyQuaternion(tq);
+  // 앞뒤: 시선 방향으로 본 기울기 - 있어야 할 기울기
+  const lean = fb.horse >= 0 ? RC.leanPerSpeed * speed + (inp && inp.duck ? RC.duckLean : 0) + (inp && inp.thrust ? 0.12 : 0) : 0;
+  _wu.set(Math.sin(refYaw) * lean, 1, Math.cos(refYaw) * lean).normalize();
+  _cf.set(Math.sin(yaw), 0, Math.cos(yaw));
+  const dp = Math.asin(clamp(up.dot(_cf), -1, 1)) - Math.asin(clamp(_wu.dot(_cf), -1, 1));
+  // 비틀림: 몸통 방향 - 몸통이 돌아가 있어야 할 방향(말 위면 말 앞 + 조준 쪽 최대 bodyYawMax, 걸을 땐 조준 방향)
+  const want = fb.horse >= 0 ? refYaw + clamp(wrapA(fb.aimYaw - refYaw), -RC.bodyYawMax, RC.bodyYawMax) : fb.aimYaw;
+  // 쉬운 조작은 몸통을 표적 쪽으로 홱 돌린다: 그 목표를 몸통이 따라오는 빠르기(약 0.12초)로 늦춰서 빼야 일부러 돈 것이 흔들림으로 안 잡힌다
+  if (cam.swW == null || cam.swP == null) cam.swW = want;
+  cam.swW += wrapA(want - cam.swW) * (1 - Math.exp(-dt / 0.12));
+  const dy = wrapA(Math.atan2(_tf.x, _tf.z) - cam.swW);
+  if (cam.swP == null || Math.abs(dp - cam.swP) > 0.8 || Math.abs(wrapA(dy - cam.swY)) > 0.8) { cam.swP = dp; cam.swY = dy; }
+  const k = 1 - Math.exp(-dt / 0.35);
+  cam.swP += (dp - cam.swP) * k; cam.swY += wrapA(dy - cam.swY) * k;
+  const g = 1.2 * S.sway;
+  return { p: clamp(dp - cam.swP, -0.35, 0.35) * g, y: clamp(wrapA(dy - cam.swY), -0.12, 0.12) * g * 0.7 };   // 좌우는 작게: 조준이 흔들리면 쉬운 조작이 헷갈린다
+}
 function playerHead(F, alpha) {
   const A = prevF.fighters[player.i], B = F.fighters[player.i];
   const p = V(A.p.x + (B.p.x - A.p.x) * alpha, A.p.y + (B.p.y - A.p.y) * alpha, A.p.z + (B.p.z - A.p.z) * alpha);
@@ -114,23 +142,24 @@ function updateFightCamera(dt, alpha) {
   const p = player, fb = curF.fighters[p.i];
   const { p: tp, q: tq } = playerHead(curF, alpha);
   const head = V(0, CFG.rider.headY + 0.04, 0.06).applyQuaternion(tq).add(tp);
-  let yaw = fb.aimYaw, pitch = fb.aimPitch;
+  let yaw = fb.aimYaw, pitch = fb.aimPitch, refYaw = 0;
   if (fb.horse >= 0) {
     const hs = vis.horses[fb.horse], fwH = V(0, 0, 1).applyQuaternion(hs.Q);
-    yaw = Math.atan2(fwH.x, fwH.z) + clamp(ctl.yaw, -2, 2); pitch = ctl.pitch;
+    refYaw = Math.atan2(fwH.x, fwH.z);
+    yaw = refYaw + clamp(ctl.yaw, -2, 2); pitch = ctl.pitch;
   } else if (fb.state === 'foot' || fb.state === 'getup') { yaw = ctl.yaw; pitch = ctl.pitch; }
   const up = V(0, 1, 0).applyQuaternion(tq);
   const fwd = V(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
   const right = V(-Math.cos(yaw), 0, Math.sin(yaw));
   const tumbling = fb.state === 'flying' || fb.state === 'ko' || fb.state === 'mounting';
   cam.shake = Math.max(0, cam.shake - dt * 2.2); cam.fovKick = Math.max(0, cam.fovKick - dt * 22);
-  const sh = cam.shake * cam.shake;
+  const sh = cam.shake * cam.shake * S.sway;
   const jitter = V((Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh, (Math.random() - 0.5) * sh);
   const hb = fb.horse >= 0 ? curF.horses[fb.horse] : null, speed = hb ? hb.speed : 0;
   const hs = vis.fighters[p.i].hs;   // 머리 젖힘 용수철 → 시야도 젖혀진다
   if (view === 'fp') {
     // 말 걸음에 맞춘 들썩임 (질주일수록 크게)
-    const bob = hb ? Math.sin(hb.gait * Math.PI * 4) * 0.035 * Math.min(1, speed / 12) : 0;
+    const bob = hb ? Math.sin(hb.gait * Math.PI * 4) * 0.035 * Math.min(1, speed / 12) * S.sway : 0;
     cam.pos.lerp(head, 1 - Math.exp(-dt * 30));
     camera.position.copy(cam.pos).add(jitter); camera.position.y += bob;
     if (tumbling) {   // 굴러떨어질 때는 몸 회전을 반쯤 따라간다 (하프소드 느낌)
@@ -139,7 +168,8 @@ function updateFightCamera(dt, alpha) {
       camera.quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(m4), 1 - Math.exp(-dt * 6));
     } else {
       const roll = -up.dot(right) * 0.45 + (fb.conscious < CFG.mind.dizzy ? Math.sin(performance.now() / 400) * 0.06 : 0) + hs.z * 0.7 + (hb ? Math.sin(hb.gait * Math.PI * 2) * 0.012 * Math.min(1, speed / 12) : 0);
-      camera.rotation.set(pitch + jitter.y * 0.4 + hs.x * 0.7, yaw + Math.PI + jitter.x * 0.4, roll);
+      const sw = bodySway(dt, tq, up, refYaw, yaw, fb, speed);
+      camera.rotation.set(pitch + jitter.y * 0.4 + hs.x * 0.7 - sw.p, yaw + Math.PI + jitter.x * 0.4 + sw.y, roll);
     }
     camera.fov = S.fov - 4 + Math.min(14, speed * 0.85) + cam.fovKick;
   } else {
@@ -320,6 +350,7 @@ function handleEvents(evs) {
         fx.flash(P, f.ch.color, 0.8 + e.frac * 2.2, 0.2);
         audio.play('cast', P, 0.6 + e.frac * 0.7, e.frac);
         if (e.frac > 0.4) voice(f, 'huff', 0.7);
+        if (e.i === pi && tst) { tst.casts++; if (player.horse >= 0 && match.horses[player.horse].speed / Math.sqrt(Math.max(0.05, 1 - e.frac)) > 9) tst.fast++; }   // 쏘기 전 속도로 질주 중이었나
         if (e.i === pi) { cam.shake += 0.12 + e.frac * 0.3; cam.fovKick += 4 + e.frac * 10; tut.cast = true; if (player.horse >= 0 && match.horses[player.horse].speed > 6) practiceTick('cast'); }
         break;
       }
@@ -356,12 +387,11 @@ function handleEvents(evs) {
         const sc = clamp(camera.position.distanceTo(P) / 9, 1, 3.2);   // 멀수록 크게 그려서 화면에서 잘 보이게
         fx.burst(P, e.thrust ? 0xff9cff : head ? 0xffe14d : 0xffb37a, sc, e.s > 14 || head);
         fx.stars(P, head ? 10 : 6, 0xffe14d, sc); fx.pop(word, P, e.thrust ? '#ffb3ff' : head ? '#ffe14d' : '#ffb37a', (1.1 + Math.min(1, e.s / 20)) * sc);
-        audio.play('bonk', P, Math.min(1.4, 0.4 + e.s / 14), head);
-        if (e.item === 'iron' || e.item === 'mace') audio.play('clank', P, 0.6);
+        audio.play('hit', P, Math.min(1.4, 0.4 + e.s / 14), head, e.fist ? 'fist' : e.item === 'iron' || e.item === 'mace' ? 'metal' : 'wood');
         const dir = V(g.rider.body.translation().x - P.x, 0, g.rider.body.translation().z - P.z).normalize();
         headKick(vis, e.j, dir, Math.min(10, e.J / (head ? 14 : 28)), vis.fighters[e.j].w.root.quaternion);
         if (head && e.dmg > 6) { const b = addBump(vis, e.j, P); if (b) bumpsGrowing.push(b); }
-        if (e.j === pi) { cam.shake += 0.25 + e.s / 35; hud.flash(0.2 + e.dmg / 80); }
+        if (e.j === pi) { cam.shake += 0.25 + e.s / 35; hud.flash(0.2 + e.dmg / 80); if (tst) tst.taken++; }
         if (e.i === pi) {
           hitStop = 0.05 + Math.min(0.06, e.s / 400); cam.shake += 0.1; tut.hit = true;
           if (e.thrust) practiceTick('thrust'); else if (!e.thrown) practiceTick('hit');
@@ -397,6 +427,7 @@ function handleEvents(evs) {
         const grabbed = by && by.grab && by.grab.kind === 'rider' && by.grab.i === f.i;
         hud.feed(by && by !== f ? `🐴 ${CJ(by, '이/가')} ${CJ(f, '을/를')} ${grabbed ? '잡아 끌어내렸다!' : '낙마시켰다!'}` : `🐴 ${CJ(f, '이/가')} 말에서 떨어졌다!`);
         if (e.i === pi || e.by === pi || nearCam(P)) slowT = 0.65;
+        if (e.i === pi && tst) tst.fell++;
         if (e.i === pi) { hud.center('낙마!', 1.4); hud.toast('떨어져도 끝이 아니다! 비틀대며 일어나서 빈 말 옆에서 <kbd>E</kbd>', 5); cam.shake += 0.6; }
         if (e.by === pi) { hud.center(grabbed ? '끌어내렸다!' : '낙마시켰다!', 1.2); practiceTick('unhorse'); }
         lastBig = { tick: match.tick, focus: e.i, by: e.by };
@@ -410,6 +441,7 @@ function handleEvents(evs) {
         const f = F(e.i), by = e.by >= 0 ? F(e.by) : null;
         fx.stars(P, 12, 0xffffff); fx.pop('기절!', P, '#ff7a6a', 1.8 * clamp(camera.position.distanceTo(P) / 9, 1, 3));
         if (e.by === pi && e.i !== pi) hud.hitMarker('kill');
+        if (e.i === pi && tst) tst.koMe++;
         audio.play('boom', P, 0.4); audio.play('cheer', 1.2); arena.setCheer(1); voice(f, 'cry', 1.2);
         flingHat(e.i, V((Math.random() - 0.5) * 4, 5, (Math.random() - 0.5) * 4));
         hud.feed(`💤 ${CJ(f, '이/가')} 기절했다${by && by !== f ? ` (${colorName(by)})` : ''}`);
@@ -602,6 +634,7 @@ function startMatch(fight, how = 'fight', custom = null) {
   vis = buildVisuals(scene, match);
   player = how === 'attract' ? null : match.fighters[0];
   assist = player ? createAssist(match, player.i) : null;
+  tst = { n: 0, sum: 0, slow: 0, casts: 0, fast: 0, fell: 0, koMe: 0, taken: 0 };
   hud.setup(match);
   frames = []; curF = prevF = makeFrame(match);
   endTimer = -1; slowT = 0; hitStop = 0; acc = 0; tut = {}; replayCd = 0; lastBig = null; practiceSpell = 4;
@@ -657,7 +690,7 @@ function finishFight() {
     $('resT').textContent = r.playerWon ? '승리!' : r.reason === 'surrender' ? '항복' : '패배';
     $('resT').className = 'bigT ' + (r.playerWon ? 'win' : 'lose');
     $('resSub').textContent = '자유 대전 · ' + Math.floor(r.t) + '초';
-    statsHTML(r);
+    statsHTML(r); testLine(r);
     $('resRewards').innerHTML = '자유 대전은 보상이 없다.';
     $('lootBox').classList.add('hidden');
     $('resRetry').textContent = '한 판 더'; $('resHub').textContent = '처음 화면';
@@ -676,7 +709,7 @@ function finishFight() {
   $('resT').className = 'bigT ' + (won ? 'win' : 'lose');
   const why = { last: won ? '말 위에 마지막까지 남았다' : '다른 기수가 끝까지 남았다', ko: '정신을 잃었다', time: won ? '판정승 (말 위에 남아 있었다)' : '판정패', surrender: '항복했다. 잃은 것은 없다' }[r.reason] || '';
   $('resSub').textContent = why + ` · ${Math.floor(r.t)}초`;
-  statsHTML(r);
+  statsHTML(r); testLine(r);
   const lines = [];
   if (won) lines.push(`<b>+${rewards.points}점</b> · 🪙 +${rewards.gold}`);
   if (rewards.rankUp && career.rank > prevRank) lines.push(`🏅 새 랭크: <b>${rankName(career.rank)}</b>`);
@@ -700,6 +733,23 @@ function statsHTML(r) {
   const me = r.fighters[0], s = me.stats, fearAvg = s.fearN > 0 ? Math.round(s.fearSum / s.fearN) : 0;
   $('resStats').innerHTML = `<div><b>${s.unhorsed}</b>낙마시킴</div><div><b>${s.kos}</b>기절시킴</div><div><b>${s.deflectHits}</b>되받아쳐 맞힘</div><div><b>${s.hits}</b>타격</div><div><b>${s.disarms}</b>무장 해제</div><div><b>${s.grabs}</b>잡기</div><div><b>${s.casts}</b>마법 (평균 ${s.casts ? Math.round(s.chargeSum / s.casts * 100) : 0}%)</div><div><b>${s.kicks}</b>발차기</div><div><b>${fearAvg}</b>고집이 평균 공포</div>`;
 }
+// 시험 기록 한 줄: 기기·조작·시점, 상대, 결과, 내가 한 것과 당한 것, 프레임. 시험해 주는 사람이 카톡에 붙여 보낸다
+function testLine(r) {
+  const s = r.fighters[0].stats, t = tst || { n: 0, sum: 0, slow: 0, casts: 0, fast: 0, fell: 0, koMe: 0, taken: 0 };
+  const opp = match.fighters.filter((f) => f !== player).map((f) => f.ch.name).join('·');
+  const res = r.playerWon ? '승' : r.reason === 'surrender' ? '항복' : '패';
+  const ms = t.n ? (t.sum / t.n * 1000).toFixed(1) : '-', slow = t.n ? Math.round(t.slow / t.n * 100) : 0;
+  const d = new Date(), day = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const line = `[마상 시험 ${VERSION}] ${day} · ${input.st.touch ? '폰' : 'PC'}·${S.adv ? '고급' : '쉬운'} 조작·${view === 'fp' ? '1인칭' : '3인칭'} · vs ${opp} · ${res} ${Math.floor(r.t)}초`
+    + ` | 마법 ${t.casts}(질주 중 ${t.fast}) · 타격 ${s.hits} · 맞음 ${t.taken} · 낙마시킴 ${s.unhorsed} · 낙마당함 ${t.fell} · 기절시킴 ${s.kos} · 되받아침 ${s.deflectHits}`
+    + ` | 프레임 평균 ${ms}ms, 느린 프레임 ${slow}%`;
+  $('resTest').textContent = line; $('resCopy').textContent = '📋 시험 기록 복사';
+}
+$('resCopy').onclick = () => {
+  const el = $('resTest'), txt = el.textContent, done = () => { $('resCopy').textContent = '복사했다 ✓'; };
+  const pick = () => { const rg = document.createRange(); rg.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); $('resCopy').textContent = '선택했다 → 길게 눌러 복사'; };
+  try { navigator.clipboard.writeText(txt).then(done, pick); } catch (e) { pick(); }
+};
 function endingScreen() {
   show('ending');
   const pair = career.ending === 'pair';
@@ -722,7 +772,7 @@ function openSettings(from) {
   settingsFrom = from; show('settings');
   const bind = (id, key, fmt) => { const el = $(id); if (el.type === 'checkbox') el.checked = !!S[key]; else el.value = S[key]; const out = $('v' + id.slice(1)); const upd = () => { if (out && fmt) out.textContent = fmt(S[key]); }; upd();
     el.oninput = el.onchange = () => { S[key] = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : +el.value; upd(); saveSettings(); if (key === 'vol') audio.setVolume(S.vol); if (key === 'shadow') applyShadow(); }; };
-  bind('sSens', 'sens', (v) => v.toFixed(2) + '×'); bind('sSwing', 'swing', (v) => v.toFixed(2) + '×'); bind('sFov', 'fov', (v) => v + '°'); bind('sVol', 'vol', (v) => Math.round(v * 100) + '%');
+  bind('sSens', 'sens', (v) => v.toFixed(2) + '×'); bind('sSwing', 'swing', (v) => v.toFixed(2) + '×'); bind('sFov', 'fov', (v) => v + '°'); bind('sSway', 'sway', (v) => Math.round(v * 100) + '%'); bind('sVol', 'vol', (v) => Math.round(v * 100) + '%');
   bind('sInv', 'inv'); bind('sReplay', 'replay'); bind('sShadow', 'shadow'); bind('sAdv', 'adv');
   $('sAdv').addEventListener('change', applyControls);
 }
@@ -800,8 +850,8 @@ function practiceTurret(dt) {
 function hooves(k, s, hb) {
   const dtv = lastDt;
   const near = camera.position.distanceTo(s.P) < 45;
-  s.hoofT += hb.speed * dtv * 0.42;
-  if (s.hoofT > 1) { s.hoofT = 0; if (near && hb.speed > 1) audio.play('hoof', s.P, Math.min(1, hb.speed / 11)); }
+  const gi = Math.floor(hb.gait);   // 다리 그림과 같은 걸음 박자: 한 걸음이 끝날 때마다 발굽 소리 한 묶음
+  if (gi !== s.gaitI) { const first = s.gaitI === undefined; s.gaitI = gi; if (!first && near && hb.speed > 1) audio.play('stride', s.P, Math.min(1, hb.speed / 11), hb.speed, (1.4 + hb.speed * 0.2) / hb.speed); }
   s.dustT -= dtv;
   if (hb.speed > 7 && s.dustT <= 0) { s.dustT = 0.09; fx.dust({ x: s.P.x, y: 0, z: s.P.z }, 1, 0xd9b67c, 0.6); }
 }
@@ -820,6 +870,7 @@ function renderSpells(A, B, alpha, dt) {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now; lastDt = dt;
+  if (mode === 'fight' && player && tst && !replay && !paused) { tst.n++; tst.sum += dt; if (dt > 0.025) tst.slow++; }
   const t = now / 1000;
   replayCd = Math.max(0, replayCd - dt);
   for (let k = bumpsGrowing.length - 1; k >= 0; k--) { const b = bumpsGrowing[k]; b.scale.multiplyScalar(1 + dt * 6); if (b.scale.x >= 1) { b.scale.setScalar(1); bumpsGrowing.splice(k, 1); } }
@@ -928,7 +979,7 @@ window.__mw = {
   koMe() { knockOut(match, player, 1); },
   replayNow(focus = 1) { startReplay(focus, match.tick); },
   input: (patch) => Object.assign(ctl, patch),
-  hud, fx, camera, THREE, ctl, input, settings: S, vp, setOrient,
+  hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient,
 };
 
 // 시작: 타이틀 뒤에서 AI 난투를 보여 준다

@@ -39,7 +39,7 @@ export function buildVisuals(scene, m) {
   const vis = { group: g, horses: [], fighters: [], weapons: [], props: [] };
   for (const h of m.horses) {
     const hv = buildHorse(h.defKey, m.fighters[h.k].ch.color); g.add(hv.root);
-    vis.horses.push({ hv, hoofT: 0, dustT: 0, P: V(), Q: new THREE.Quaternion() });
+    vis.horses.push({ hv, gaitI: undefined, dustT: 0, P: V(), Q: new THREE.Quaternion() });
   }
   for (const f of m.fighters) {
     const w = buildWizard(f.char, f.loadout); g.add(w.root);

@@ -1,5 +1,5 @@
 # 「마상 마법 난투」 데모를 친구에게 보내기 쉬운 HTML 파일 하나로 묶는다.
-# 우리 모듈 16개를 파일 안에 넣는다. three.js와 Rapier는 jsDelivr에서 받으므로 인터넷이 필요하다.
+# 우리 모듈 16개와 녹음 소리(sfx/*.mp3, base64)를 파일 안에 넣는다. three.js와 Rapier는 jsDelivr에서 받으므로 인터넷이 필요하다.
 # 사용: python build_share.py  -> ../../mw-play.html (프로젝트 폴더, 카톡용) + ../share/mw-play-artifact.html (웹 링크용)
 import os, re
 
@@ -28,10 +28,18 @@ for name in ORDER:
 main = convert(read('main.js'))
 bundle = THREE + '\n' + '\n'.join(parts) + '// ----- main.js -----\n' + main
 
+# 녹음 소리(sfx/*.mp3)는 base64로 넣는다. audio.js가 window.__SFX가 있으면 파일 대신 이것을 쓴다
+import base64, json
+sfx = {}
+for f in sorted(os.listdir(os.path.join(HERE, 'sfx'))):
+    if f.endswith('.mp3'):
+        sfx[f[:-4]] = base64.b64encode(open(os.path.join(HERE, 'sfx', f), 'rb').read()).decode('ascii')
+sfx_tag = '<script>window.__SFX = ' + json.dumps(sfx, separators=(',', ':')) + ';</script>\n'
+
 html = read('index.html')
 tag = '<script type="module" src="./main.js"></script>'
 assert tag in html
-html = html.replace(tag, '<script type="module">\n' + bundle.replace('</script>', '<\\/script>') + '</script>')
+html = html.replace(tag, sfx_tag + '<script type="module">\n' + bundle.replace('</script>', '<\\/script>') + '</script>')
 
 out1 = os.path.join(ROOT, 'mw-play.html')
 open(out1, 'w', encoding='utf-8').write(html)

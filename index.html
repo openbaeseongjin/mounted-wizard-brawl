@@ -203,6 +203,7 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   body.simple #touch #tbDuck{right:22px;bottom:98px;width:50px;height:50px;font-size:11px}
   body.simple #toast{bottom:auto;top:calc(var(--topH,96px) + 6px)}
   #tgt b{font-size:13px}
+  #result .bigT{font-size:30px;margin:0}#result #resSub{font-size:13px!important}#result .stats{grid-template-columns:repeat(5,1fr);gap:4px;margin:6px 0}#result .stats div{padding:2px 4px;font-size:10px}#result .stats b{font-size:17px}#result .btnRow{margin-top:6px}#result .btnRow button{padding:6px 12px}#result .line{font-size:12px;padding:4px 8px;margin:4px 0}#result .panel{padding-top:8px;padding-bottom:8px}
 }
 #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff7e6;font-family:"Black Han Sans";font-size:24px;z-index:60;background:var(--bg)}
 #error{position:fixed;left:10px;right:10px;bottom:10px;background:#300;color:#fdd;font:12px monospace;padding:8px;white-space:pre-wrap;z-index:70;display:none;max-height:40vh;overflow:auto}#error.show{display:block}
@@ -251,7 +252,7 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
     <b>좌클릭 누른 채 마우스</b> 휘두르기 · <kbd>C</kbd> 찌르기 · <kbd>Q</kbd> 잡아 끌어내리기 · <kbd>E</kbd> 줍기·던지기·다시 타기 · 걸을 땐 <kbd>Space</kbd> 발차기<br>
     처음이면 <b>연습장</b>에서 가만히 있는 허수아비로 동작을 하나씩 해 보세요.
   </div>
-  <small>데모 v0.2 · PC + 마우스 권장 (폰은 가로로) · 그래픽·소리는 모두 코드로 만든 임시판</small>
+  <small>데모 v0.3b · PC + 마우스 권장 (폰은 가로로) · 그래픽은 코드로 만든 임시판<br>녹음 소리: Kenney · HaelDB (CC0) · 말발굽 congusbongus (CC BY 4.0) · 말 울음 Briefer 외 2015, Scientific Reports (CC BY 4.0)</small>
 </section>
 
 <section id="hub" class="screen hidden"><div class="panel">
@@ -290,8 +291,10 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   <div class="bigT" id="resT"></div><div id="resSub" class="note" style="font-size:16px"></div>
   <div class="stats" id="resStats"></div>
   <div id="resRewards" class="line" style="text-align:left"></div>
+  <div class="note" style="margin-top:8px;font-size:12px;text-align:left;word-break:keep-all"><b>시험 기록</b> · 시험해 주시는 분은 이 줄을 복사해서 보내 주세요
+    <div id="resTest" style="user-select:text;-webkit-user-select:text;background:#fff7e6;border:1px dashed var(--ink);border-radius:8px;padding:6px;margin-top:4px;font-size:12px;line-height:1.5"></div></div>
   <div id="lootBox" class="hidden"><h3 style="margin:6px 0">전리품 하나 고르기</h3><div class="loot" id="loot"></div></div>
-  <div class="btnRow"><button id="resHub" class="primary">마구간으로</button><button id="resRetry">한 판 더</button></div>
+  <div class="btnRow"><button id="resHub" class="primary">마구간으로</button><button id="resRetry">한 판 더</button><button id="resCopy">📋 시험 기록 복사</button></div>
 </div></section>
 
 <section id="ending" class="screen hidden"><div class="panel">
@@ -311,6 +314,7 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   <div class="setRow"><label for="sSens">마우스 감도</label><input id="sSens" type="range" min="0.3" max="3" step="0.05"><span id="vSens"></span></div>
   <div class="setRow"><label for="sSwing">휘두르기 감도</label><input id="sSwing" type="range" min="0.3" max="3" step="0.05"><span id="vSwing"></span></div>
   <div class="setRow"><label for="sFov">시야각</label><input id="sFov" type="range" min="60" max="100" step="1"><span id="vFov"></span></div>
+  <div class="setRow"><label for="sSway">화면 흔들림</label><input id="sSway" type="range" min="0" max="1.5" step="0.05"><span id="vSway"></span></div>
   <div class="setRow"><label for="sVol">소리 크기</label><input id="sVol" type="range" min="0" max="1" step="0.05"><span id="vVol"></span></div>
   <div class="setRow"><label for="sInv">상하 반전</label><input id="sInv" type="checkbox" style="justify-self:start"><span></span></div>
   <div class="setRow"><label for="sReplay">낙마 다시 보기</label><input id="sReplay" type="checkbox" style="justify-self:start"><span></span></div>
