@@ -1,13 +1,28 @@
 // 건틀릿 규칙 (순수 함수, 하프소드식 랭크 사다리를 우리 컨셉으로)
 // 낮은 장비로 이길수록 포인트↑ · 랭크 결정전 · 전리품 · 기절 패배 = 장비 압수 · 항복 = 잃는 것 없음
-import { LADDER, ITEMS, STARTER, RANK_NAMES } from './config.js';
+import { LADDER, ITEMS, STARTER, RANK_NAMES, JOBS, CHARS, slotsFor } from './config.js';
+export { slotsFor };
 
 export function newCareer() {
   return {
     rank: 0, points: 0, gold: 0, loadout: { ...STARTER }, inventory: Object.values(STARTER), fightIdx: 0,
     wins: 0, losses: 0, fearSum: 0, fearN: 0, chargeSum: 0, casts: 0, swings: 0, time: 0, champion: false, ending: null, log: [],
+    job: null, jobTier: 0, trials: {},   // 전직: 원소, 단계(0 견습 · 1 · 2), 시험별 시도 수
   };
 }
+// 옛 저장(v0.3b 이전): 전직 필드를 채운다
+export function normalizeCareer(c) {
+  if (!c) return newCareer();
+  if (c.job === undefined) c.job = null;
+  if (c.jobTier === undefined) c.jobTier = 0;
+  if (!c.trials) c.trials = {};
+  return c;
+}
+// 전직 제안: 첫 승리 뒤 1차, 랭크 결정전 승리 뒤 2차
+export const jobOffer = (c) => (c.jobTier === 0 && c.wins >= 1 ? 1 : c.jobTier === 1 && c.rank >= 1 ? 2 : 0);
+export function chooseJob(c, job) { if (c.jobTier !== 0 || !JOBS[job]) return false; c.job = job; return true; }
+export function passTrial(c, trial) { if (c.job !== trial.job || c.jobTier !== trial.tier - 1) return false; c.jobTier = trial.tier; return true; }
+export function failTrial(c, trial) { c.trials[trial.id] = (c.trials[trial.id] || 0) + 1; return c.trials[trial.id]; }
 
 export const tierSum = (loadout) => Object.values(loadout).reduce((s, id) => s + (ITEMS[id] ? ITEMS[id].tier : 0), 0);
 export const tierMul = (sum) => (sum <= 1 ? 1.5 : sum <= 3 ? 1.2 : sum <= 5 ? 1.0 : 0.8);
@@ -19,8 +34,13 @@ export function currentFights(c) {
 }
 
 export function buildRoster(c, fight) {
-  return [{ char: 'maji', isPlayer: true, loadout: { ...c.loadout } },
-    ...fight.opp.map((id) => ({ char: id, loadout: fight.oppLoadout && fight.oppLoadout[id] }))];
+  const me = { char: 'maji', isPlayer: true, loadout: { ...c.loadout }, job: c.job, jobTier: c.jobTier, slots: slotsFor(c.job, c.jobTier) };
+  return [me, ...fight.opp.map((id) => {
+    const ch = CHARS[id], ov = fight.oppJob && fight.oppJob[id];
+    let job = ov ? ov[0] : ch.job || null, tier = ov ? ov[1] : ch.jobTier || 0;
+    if (job === 'mimic') { job = c.job; tier = c.jobTier; }   // 세린: 내 원소를 따라 한다
+    return { char: id, loadout: fight.oppLoadout && fight.oppLoadout[id], job, jobTier: tier, slots: slotsFor(job, tier) };
+  })];
 }
 
 export function pointsFor(fight, result, loadout) {

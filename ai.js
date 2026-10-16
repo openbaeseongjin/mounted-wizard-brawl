@@ -1,9 +1,10 @@
 // 상대 AI: 플레이어와 같은 입력 구조를 만든다
 // 성격: dummy 허수아비 / heavy 묵직이 / quick 번개 / sneaky 기회주의자 / rival 라이벌 / still 연습장 과녁
 // v0.2: 근접 막기, 찌르기 돌진, 잡기, 무기 줍기, 던지기, 발차기
-import { CFG, PERSONAS } from './config.js';
+import { CFG, PERSONAS, SPELLS } from './config.js';
 import { createRng, add, sub, scale, len, norm, clamp, dot, wrapAngle, fwdOf, rightOf, hdist } from './rng.js';
 import { idleInput, steerToward, avoidFence, weaponTip } from './fighter.js';
+import { avoidZones } from './zones.js';
 
 export function createBrain(m, i, personaKey, seed) {
   const P = { ...PERSONAS[personaKey] };
@@ -14,13 +15,14 @@ export function createBrain(m, i, personaKey, seed) {
   const rng = createRng(seed);
   const b = { target: -1, decideT: 0, swingT: -1, swingSide: 1, swingDur: 0.2, castCd: rng.range(1.5, 3.5), passSide: rng.chance(0.5) ? 1 : -1,
     patrol: 1, seen: new Set(), lurkDir: rng.chance(0.5) ? 1 : -1, lookYaw: 0, flip: false, chargeGoal: P.chargeGoal,
-    grabT: 0, grabCd: rng.range(2, 5), parryCd: 0, throwAt: -1, kickCd: 1, thrustT: 0 };
+    grabT: 0, grabCd: rng.range(2, 5), parryCd: 0, throwAt: -1, kickCd: 1, thrustT: 0, spellCd: 0, trailT: 0 };
 
   const pos = (g) => g.rider.body.translation();
   const vel = (g) => (g.horse >= 0 ? m.horses[g.horse].body.linvel() : g.rider.body.linvel());
   const pulse = () => { b.flip = !b.flip; return b.flip; };   // 누르기 가장자리(edge)를 만들려고 번갈아 켠다
 
   function pickTarget(f) {
+    if (P.mode) return -1;   // 시험용 성격은 표적 없이 움직이기만
     const me = pos(f), others = m.fighters.filter((g) => g.i !== f.i && !g.out);
     if (!others.length || P.still) return -1;
     if (personaKey === 'dummy' || personaKey === 'rival') { const p = others.find((g) => g.isPlayer); if (p) return p.i; }
@@ -106,6 +108,72 @@ export function createBrain(m, i, personaKey, seed) {
     return best ? { w: best, d: bd } : null;
   }
 
+  // 시험용 성격: 공격 없이 움직이기만 (circle 돌기 · rush 정면 질주 · swarm 옆에 붙기 · flee 달아나기)
+  function trialMove(f, inp, h, hp) {
+    const pl = m.fighters.find((g) => g.isPlayer), pp = pl ? pos(pl) : { x: 0, y: 0, z: 0 };
+    const toPl = Math.atan2(pp.x - hp.x, pp.z - hp.z), d = hdist(hp, pp);
+    let desired = h.heading, throttle = 1, gallop = false;
+    if (P.mode === 'circle') {
+      const r = Math.hypot(hp.x, hp.z), ang = Math.atan2(hp.x, hp.z), R0 = P.r + (f.i % 2 ? P.r2 || 0 : 0);
+      desired = ang + b.lurkDir * Math.PI / 2 + clamp((r - R0) / 6, -0.6, 0.6) * b.lurkDir; throttle = P.speed;
+    } else if (P.mode === 'rush') { desired = toPl; gallop = d > 6 && !h.winded; }
+    else if (P.mode === 'swarm') {
+      const ph = pl && pl.horse >= 0 ? m.horses[pl.horse] : null, side = (f.i % 2 ? 1 : -1) * 2.5;
+      const goal = add(pp, scale(rightOf(ph ? ph.heading : toPl), side));
+      desired = Math.atan2(goal.x - hp.x, goal.z - hp.z);
+      throttle = d > 6 ? 1 : ph && h.speed > ph.speed + 0.5 ? 0.3 : 0.9; gallop = d > 10;
+    } else if (P.mode === 'flee') { desired = toPl + Math.PI; gallop = d < 20 && !h.winded; }
+    desired = avoidFence(m, h, desired, P.mode === 'circle' ? 4 : 8);
+    inp.move = [steerToward(h, desired), throttle]; inp.gallop = gallop; inp.look = [0, 0];
+  }
+
+  // 원소 마법 쓰기: 지금 이 마법을 누를 때인가 (모으기 마법은 모으기 시작할 때), 언제 떼나
+  const KEY = { main: 'charge', big: 'big' };
+  function spellAI(f, inp, dt, h, hp, g, inCone) {
+    const slots = f.slots, mv = h.body.linvel(), mySp = Math.hypot(mv.x, mv.z);
+    const info = (x) => { const p = pos(x), v = vel(x), rx = p.x - hp.x, rz = p.z - hp.z, dd = Math.hypot(rx, rz);
+      return { d: dd, sp: Math.hypot(v.x, v.z), ahead: Math.abs(wrapAngle(Math.atan2(rx, rz) - h.heading)), closing: -((v.x - mv.x) * rx + (v.z - mv.z) * rz) / Math.max(1, dd) }; };
+    const T = g ? info(g) : null;
+    const want = (id) => {
+      if (!T) return false;
+      switch (id) {
+        case 'orb': case 'fireball': return b.castCd <= 0 && m.t > 3 && T.d > 7 && T.d < 34 && h.speed > (personaKey === 'dummy' ? 3 : 6) && inCone;
+        case 'gust': return T.d < 10;
+        case 'wall': return T.ahead < 0.3 && T.d > 9 && T.d < 16 && T.closing > 9;
+        case 'ice': return T.ahead < 0.3 && T.d > 10 && T.d < 16 && T.closing > 8;
+        case 'fissure': return T.ahead < 0.25 && T.d > 6 && T.d < 16 && T.sp > 9;
+        case 'tornado': return m.fighters.filter((x) => x !== f && !x.out && (() => { const q = info(x); return q.d < 15 && q.ahead < 0.4; })()).length >= 2;
+        case 'whip': return b.spellCd <= 0 && T.d < SPELLS.whip.range && mySp > T.sp + 1.5 && inCone;
+        case 'firetrail': return b.spellCd <= 0 && T.ahead > Math.PI - 0.8 && T.d < 15;
+      }
+      return false;
+    };
+    const releaseAt = (id) => (id === 'gust' ? f.charge >= SPELLS.gust.minF && T && T.d < 3.5
+      : id === 'orb' || id === 'fireball' ? f.charge >= b.chargeGoal || !(inCone || f.charge < 0.12)
+        : id === 'fissure' ? f.charge >= 0.4 : f.charge >= 0.5);
+    // 모으는 중이면 그 슬롯만 다룬다
+    if (f.charging && f.chargeSlot) {
+      const id = slots[f.chargeSlot], keep = !releaseAt(id) && !(id === 'gust' && (!T || T.d > 14));
+      inp[KEY[f.chargeSlot]] = keep;
+      if (!keep && (id === 'orb' || id === 'fireball')) b.castCd = personaKey === 'dummy' ? P.castEvery : personaKey === 'heavy' ? rng.range(2.5, 4) : personaKey === 'quick' ? rng.range(0.8, 1.6) : rng.range(1.4, 2.8);
+      return;
+    }
+    // 누르고 있기 마법 (물채찍·불길)
+    for (const slot of ['big', 'main']) {
+      const id = slots[slot]; if (!id || SPELLS[id].press !== 'hold') continue;
+      if (f.holdOn[id]) {
+        if (id === 'whip') { const keepWhip = !!f.whip && !!T && mySp >= T.sp; inp[KEY[slot]] = keepWhip; if (!keepWhip) b.spellCd = 2.5; }
+        else { b.trailT += dt; inp[KEY[slot]] = b.trailT < 1.5; if (b.trailT >= 1.5) { b.trailT = 0; b.spellCd = 3; } }
+        return;
+      }
+      if (want(id)) { inp[KEY[slot]] = true; return; }
+    }
+    for (const slot of ['big', 'main']) {
+      const id = slots[slot]; if (!id || SPELLS[id].press !== 'charge') continue;
+      if (want(id)) { inp[KEY[slot]] = true; return; }
+    }
+  }
+
   function mounted(f, inp, dt) {
     const h = m.horses[f.horse], hp = h.body.translation();
     let desired = h.heading, throttle = 0.8, gallop = false, aimAt = null, d = 99, g = null;
@@ -115,6 +183,7 @@ export function createBrain(m, i, personaKey, seed) {
       inp.move = [0, 0]; inp.look = [0, 0];
       return;
     }
+    if (P.mode) { trialMove(f, inp, h, hp); return; }
     if (loose && !(b.target >= 0 && hdist(hp, pos(m.fighters[b.target])) < 5)) {
       // 맨손: 떨어진 지팡이를 주우러 간다 (가까우면 속도를 줄이고 E)
       const wp = loose.w.body.translation();
@@ -157,6 +226,7 @@ export function createBrain(m, i, personaKey, seed) {
       // 잡고 있으면 반대쪽으로 꺾어서 끌어낸다
       if (f.grab) desired = toYaw + Math.PI * 0.6 * b.passSide;
     }
+    desired = avoidZones(m, h, desired);   // 불 자리·불길은 돌아간다
     desired = avoidFence(m, h, desired, 8);
     inp.move = [steerToward(h, desired), throttle];
     inp.gallop = gallop;
@@ -175,14 +245,10 @@ export function createBrain(m, i, personaKey, seed) {
     b.thrustT = Math.max(0, b.thrustT - dt);
     if (P.thrust && !unarmed && g && d < 15 && d > 2 && h.speed > 8 && Math.abs(lookRel) < 0.35 && !f.charging && b.swingT < 0) b.thrustT = 0.4;
     if (b.thrustT > 0) { inp.thrust = true; inp.reach = d < 4.5 ? 1 : 0.1; }
-    // 쏘기
-    b.castCd -= dt;
+    // 쏘기: 슬롯 마법마다 쓰는 때가 다르다 (설계 6장)
+    b.castCd -= dt; b.spellCd -= dt;
     const inCone = aimAt && Math.abs(wrapAngle(lookRel - b.lookYaw)) < 0.15 && Math.abs(lookRel) < 1.4;
-    const wantCast = !unarmed && aimAt && b.castCd <= 0 && m.t > 3 && d > 7 && d < 34 && h.speed > (personaKey === 'dummy' ? 3 : 6) && inCone && b.swingT < 0 && !inp.thrust;
-    if (f.charging) {
-      inp.charge = f.charge < b.chargeGoal && (inCone || f.charge < 0.12);
-      if (!inp.charge) b.castCd = personaKey === 'dummy' ? P.castEvery : personaKey === 'heavy' ? rng.range(2.5, 4) : personaKey === 'quick' ? rng.range(0.8, 1.6) : rng.range(1.4, 2.8);
-    } else if (wantCast) inp.charge = true;
+    if (!unarmed && b.swingT < 0 && !inp.thrust) spellAI(f, inp, dt, h, hp, g, inCone);
     // 휘두르기
     if (aimAt && d < 4.6 && b.swingT < 0 && !f.charging && !inp.thrust && rng.chance(P.swing * 0.5)) {
       const side = dot(sub(aimAt, hp), rightOf(h.heading)) >= 0 ? 1 : -1;
@@ -200,7 +266,7 @@ export function createBrain(m, i, personaKey, seed) {
     watchSpells(f, inp, aimYaw);
     watchMelee(f, aimYaw, dt);
     swingInput(inp, dt);
-    if (inp.swing) inp.charge = false;
+    if (inp.swing) { inp.charge = false; inp.big = false; }
   }
 
   function onFoot(f, inp, dt) {

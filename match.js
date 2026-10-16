@@ -5,6 +5,8 @@ import { createRng, v3, add, sub, scale, dot, cross, len, norm, clamp, qRotate, 
 import { createHorse, createFighter, createWeapon, controlFighter, controlHorse, hurt, idleInput, dropWeapon, footImpact, knockDown, revive, updateLooseWeapons, GROUND_GROUPS, FENCE_GROUPS } from './fighter.js';
 import { releaseCharge, stepSpells } from './spells.js';
 import { createBrain } from './ai.js';
+import { castStep, stepMagic, wallCrash } from './magic.js';
+import { stepZones } from './zones.js';
 
 const Y = { x: 0, y: 1, z: 0 };
 
@@ -25,13 +27,15 @@ export const PROP_SPOTS = [
 export function createMatch(R, opts) {
   const world = new R.World({ x: 0, y: CFG.gravity, z: 0 });
   world.timestep = TICK;
-  const practice = opts.mode === 'practice';
+  const practice = opts.mode === 'practice', trial = opts.mode === 'trial';   // trial: 전직 시험 (opts.judge가 끝을 정한다)
   const m = {
     R, world, opts, t: -(opts.countdown ?? 3), tick: 0, rng: createRng(opts.seed || 1), info: new Map(),
     fighters: [], horses: [], weapons: [], props: [], spells: [], nextSpellId: 1, fenceR: CFG.arena.r0, events: [], over: false, result: null,
     pre: new Map(), cds: new Map(), fence: [], practice, koT: new Map(),
     emit(e) { e.t = m.t; m.events.push(e); },
     release(f) { return releaseCharge(m, f); },
+    castStep(f, dt, ok) { return castStep(m, f, dt, ok); },
+    zones: [], walls: [], tornados: [], fissures: [], nextObjId: 1, reactions: opts.reactions !== false,
   };
   // 바닥
   const ground = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0));
@@ -91,7 +95,7 @@ export function createMatch(R, opts) {
   const queue = new R.EventQueue(true);
 
   function updateFence() {
-    const r = m.fenceR = fenceRadius(m.t, practice);
+    const r = m.fenceR = fenceRadius(m.t, practice || trial);
     if (Math.abs(r - m.fenceRSet) < 1e-4) return;
     m.fenceRSet = r;
     for (const s of m.fence) {
@@ -238,6 +242,11 @@ export function createMatch(R, opts) {
       if (h.speed > 4 && cdOk('hp' + h.k + '_' + (a.kind === 'prop' ? a.p : b.p), 0.6)) { h.fear = Math.min(100, h.fear + 3); m.emit({ type: 'propHit', kind: p.kind, pos: p.body.translation(), s: h.speed }); }
       return;
     }
+    if ((a.kind === 'horse' && b.kind === 'wall') || (b.kind === 'horse' && a.kind === 'wall')) {
+      const hk = a.kind === 'horse' ? a.k : b.k, wid = a.kind === 'wall' ? a.id : b.id, h = m.horses[hk];
+      wallCrash(m, h, m.walls.find((w) => w.id === wid), m.pre.get(h.body.handle));
+      return;
+    }
     if ((a.kind === 'horse' && b.kind === 'fence') || (b.kind === 'horse' && a.kind === 'fence')) {
       const h = m.horses[a.kind === 'horse' ? a.k : b.k];
       if (h.speed > 4 && cdOk('hf' + h.k, 0.6)) { h.fear = Math.min(100, h.fear + CFG.fear.fence); m.emit({ type: 'fence', k: h.k, pos: h.body.translation() }); }
@@ -293,7 +302,9 @@ export function createMatch(R, opts) {
       }
     }
     for (const f of m.fighters) controlFighter(m, f, dt);
+    stepZones(m, dt);   // 말이 빙판·불 위인지 (controlHorse가 미끄러짐을 쓴다)
     for (const h of m.horses) controlHorse(m, h, dt);
+    stepMagic(m, dt);   // 흙벽·회오리·균열
     updateLooseWeapons(m, dt);
     m.pre.clear();
     for (const f of m.fighters) snap(f.rider.body);
@@ -313,13 +324,18 @@ export function createMatch(R, opts) {
       if (practice && rs.state === 'ko' && !f.isPlayer) { const k = (m.koT.get(f.i) || 0) + dt; m.koT.set(f.i, k); if (k > 5) { m.koT.delete(f.i); revive(m, f); } }
       if (practice && f.isPlayer && rs.state === 'ko') { const k = (m.koT.get(f.i) || 0) + dt; m.koT.set(f.i, k); if (k > 3) { m.koT.delete(f.i); revive(m, f); } }
     }
-    if (!m.over && m.t > 0 && !practice) {
+    if (!m.over && m.t > 0 && !practice && !trial) {
       const alive = m.fighters.filter((f) => !f.out), player = m.fighters.find((f) => f.isPlayer);
       if (player && player.out) end(player.surrendered ? 'surrender' : 'ko', alive.length === 1 ? alive[0].i : -1);
       else if (alive.length <= 1) end('last', alive.length ? alive[0].i : -1);
       else if (m.t >= CFG.arena.timeLimit) end('time', judge());
     }
     if (practice && !m.over) { const player = m.fighters.find((f) => f.isPlayer); if (player && player.surrendered) end('surrender', -1); }
+    if (trial && !m.over && m.t > 0) {
+      const v = opts.judge(m, m.events), player = m.fighters.find((f) => f.isPlayer);
+      if (v === 'pass') end('pass', player.i);
+      else if (v === 'fail' || player.surrendered) end('fail', -1);
+    }
     return m.events;
   };
 
@@ -334,6 +350,11 @@ export function createMatch(R, opts) {
     for (const hz of m.horses) { const p = hz.body.translation(); mix(p.x); mix(p.z); mix(hz.fear); mix(hz.stam); }
     for (const pr of m.props) { const p = pr.body.translation(); mix(p.x); mix(p.z); }
     mix(m.spells.length); for (const sp of m.spells) { mix(sp.pos.x); mix(sp.pos.z); }
+    for (const z of m.zones) { mix(z.a.x); mix(z.a.z); mix(z.b.x); mix(z.r); }
+    for (const w of m.walls) { const p = w.body.translation(); mix(p.x); mix(p.y); mix(p.z); }
+    for (const t of m.tornados) { mix(t.pos.x); mix(t.pos.z); }
+    for (const s of m.fissures) mix(s.front);
+    for (const f of m.fighters) mix(f.whip ? f.whip.j + 1 : 0);
     return h.toString(16);
   };
   m.free = () => { try { queue.free(); world.free(); } catch (e) { /* 이미 해제됨 */ } };

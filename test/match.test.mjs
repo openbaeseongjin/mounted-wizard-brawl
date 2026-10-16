@@ -63,3 +63,9 @@ test('카운트다운 동안 말은 움직이지 않는다', async () => {
   assert.ok(Math.hypot(v.x, v.z) < 0.3);
   assert.ok(!m.over);
 });
+
+test('결정론: 원소 AI 4인 난투 20초, 같은 시드 → 같은 해시', async () => {
+  const roster = ['mukjik', 'beongae', 'gihoe', 'boss1'].map((c) => ({ char: c }));
+  const go = async () => { const m = await makeMatch({ seed: 5, mode: 'brawl', roster }); run(m, 20); return m.hash(); };
+  assert.equal(await go(), await go());
+});

@@ -207,6 +207,54 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
 }
 #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff7e6;font-family:"Black Han Sans";font-size:24px;z-index:60;background:var(--bg)}
 #error{position:fixed;left:10px;right:10px;bottom:10px;background:#300;color:#fdd;font:12px monospace;padding:8px;white-space:pre-wrap;z-index:70;display:none;max-height:40vh;overflow:auto}#error.show{display:block}
+
+/* ---------- v0.4a 4원소 전직 · 상점 (시안: .playwright-mcp/mw_jobmock.js, mw_jobshop.js) ---------- */
+.tabs{display:flex;gap:8px;margin:0 0 8px;align-items:center;flex-wrap:wrap}.tabs button{font-size:16px;padding:6px 14px;box-shadow:0 3px 0 #2a1608}.tabs button.on{background:var(--gold)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:7px;margin:4px 0 10px}
+.icard{background:#fff7e6;border:3px solid var(--ink);border-radius:12px;padding:7px 3px 6px;text-align:center;font-size:12px;line-height:1.3;box-shadow:0 3px 0 #2a1608;position:relative;cursor:pointer}
+.icard .ic{width:42px;height:42px;border-radius:50%;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:22px;border:3px solid var(--ink);background:#f0dcae}
+.icard b{font-family:"Black Han Sans";font-weight:400;font-size:13px;display:block}
+.icard .pr{font-family:"Black Han Sans";font-size:13px;margin-top:2px}
+.icard .eq{display:inline-block;background:var(--ink);color:var(--paper);border-radius:999px;padding:0 7px;font-size:11px;margin-top:3px}
+.icard .own{display:inline-block;border:2px solid var(--ink);border-radius:999px;padding:0 7px;font-size:11px;margin-top:3px}
+.icard .tr{position:absolute;top:3px;right:4px;font-family:"Black Han Sans";font-size:10px;background:var(--paper2);border:1.5px solid var(--ink);border-radius:6px;padding:0 4px}
+.icard.sel{box-shadow:0 0 0 4px var(--gold),0 5px 0 #2a1608;transform:translateY(-4px)}
+.srow{display:grid;grid-template-columns:86px 1fr 104px;align-items:center;gap:8px;margin:4px 0;font-size:15px}.srow .lb{font-family:"Black Han Sans"}
+.sbar{height:14px;border:2px solid var(--ink);border-radius:8px;background:#fff;position:relative;overflow:hidden}
+.sbar b{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--gold),#ff9a3d)}
+.sbar u{position:absolute;top:0;bottom:0;background:#3cbf6a}.sbar u.dn{background:repeating-linear-gradient(45deg,#e8483b 0 4px,#ffb3a8 4px 8px)}
+.num{font-family:"Black Han Sans";font-size:16px}.num.up{color:#23934a}.num.dn{color:#c9362b}.num.same{opacity:.6}.num small{font-family:"Gowun Dodum";font-size:11px}
+.rule{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;margin:6px 0 2px}.rule span{border:2px solid var(--ink);border-radius:999px;padding:1px 10px;background:#fff}.rule span.warn{background:#ffe1d8}.rule span.ok{background:#dff5e3}
+.tag{font-family:"Black Han Sans";font-size:14px;font-weight:400;border:2px solid var(--ink);border-radius:999px;padding:1px 10px;margin-left:6px;vertical-align:3px;background:#fff}
+.gearRow{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:6px 0}.gearRow div{background:#fff;border:2px solid var(--ink);border-radius:10px;padding:4px 2px;text-align:center;font-size:11px;line-height:1.3}.gearRow div b{display:block;font-size:18px}.gearRow div.risk{background:#ffe1d8;border-color:#c9362b}
+.spells{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}.spells div{background:#fff;border:2px solid var(--ink);border-radius:10px;padding:5px 8px;font-size:12px;line-height:1.35}.spells div b{font-family:"Black Han Sans";font-weight:400;font-size:16px;display:block}.spells div.lock{background:#eee6d6}.spells kbd{font-size:11px}
+.shopBtn{background:#c58bff}button.pulse{animation:pulse 1s ease-in-out infinite}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(242,194,48,.7),var(--shadow)}}
+.chip.bad{background:#ffe1d8}
+.npc{background:var(--paper2);border:3px solid var(--ink);border-radius:12px;padding:6px 12px;margin:4px 0 8px;font-size:15px;line-height:1.45;box-shadow:0 3px 0 #2a1608}.npc b{font-family:"Black Han Sans";font-weight:400;margin-right:6px}
+.quiz{background:#fff7e6;border:3px dashed var(--ink);border-radius:12px;padding:8px 12px;margin:0 0 8px;font-size:15px}.quiz b{font-family:"Black Han Sans";font-weight:400;margin-right:6px}.quiz .btnRow{margin-top:6px}
+.jobs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 8px}
+@container (max-width:760px){.jobs{grid-template-columns:repeat(2,1fr)}}
+.job{background:#fff7e6;border:3px solid var(--ink);border-radius:14px;padding:6px 6px 7px;font-size:11.5px;line-height:1.35;box-shadow:0 3px 0 #2a1608;cursor:pointer}
+.job.sel{box-shadow:0 0 0 4px var(--gold),0 5px 0 #2a1608;transform:translateY(-4px)}
+.jh{display:flex;align-items:center;gap:7px;margin-bottom:5px}.jh .ic{width:32px;height:32px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid var(--ink)}
+.jh b{font-family:"Black Han Sans";font-weight:400;font-size:15px;display:block;line-height:1.1}.jh .sp{font-size:12px;opacity:.8}
+.sk{display:flex;align-items:center;gap:4px;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:2px 5px;margin:3px 0;font-family:"Black Han Sans";font-size:13px}
+.sk.lock{background:#eee6d6;opacity:.85}.sk .t{font-size:10px;border-radius:5px;padding:0 4px;border:1.5px solid var(--ink);background:var(--gold)}.sk.lock .t{background:#fff}
+.ln{margin:3px 0}.ln .k{font-family:"Black Han Sans";font-size:12px;margin-right:4px}.ln .up{color:#23934a;font-family:"Black Han Sans"}.ln .w{color:#23934a}.ln .l{color:#c9362b}
+.hint{background:#fff3c4;border:2px solid var(--ink);border-radius:10px;padding:4px 10px;margin:6px 0;font-size:14px}
+#trialHud{position:absolute;left:50%;top:calc(var(--topH,60px) + 6px);transform:translateX(-50%);background:rgba(255,247,230,.95);border:3px solid #2a1608;border-radius:14px;padding:6px 16px 8px;box-shadow:0 4px 0 #2a1608;min-width:min(520px,90cqw);text-align:center;color:#2a1608;pointer-events:none}
+#trialHud .h b{font-family:"Black Han Sans";font-weight:400;font-size:20px}#trialHud .h span{font-size:13px;border:2px solid #2a1608;border-radius:999px;padding:0 9px;margin-right:8px;background:#c8f0dc;vertical-align:3px}
+#trialHud .d{font-size:15px;margin-top:2px}#trialHud .p{display:flex;justify-content:center;gap:14px;margin-top:5px;font-family:"Black Han Sans";font-size:16px}#trialHud .p i{font-style:normal;border:2px solid #2a1608;border-radius:8px;padding:0 9px;background:#fff}
+#trialTip{position:absolute;right:16px;bottom:140px;background:rgba(255,247,230,.95);border:3px solid #2a1608;border-radius:12px;padding:7px 12px;font-size:14px;color:#2a1608;max-width:300px;line-height:1.45;box-shadow:0 3px 0 #2a1608;pointer-events:none}
+#tbBig{right:20px;bottom:196px}body.simple #touch #tbBig{right:150px;bottom:156px;width:66px;height:66px;font-size:14px}
+/* 폰 가로: 시험 안내판은 한 줄(목표 문장은 숨김), 전직관 말풍선은 왼쪽 빈자리로 (조준선·큰 마법 버튼을 가리지 않게) */
+@container (max-height:500px) and (orientation:landscape){
+  #trialHud{min-width:0;display:flex;align-items:center;gap:8px;white-space:nowrap;padding:2px 10px 3px;border-width:2px;border-radius:10px;top:calc(var(--topH,60px) + 2px);box-shadow:0 2px 0 #2a1608}
+  #trialHud .h b{font-size:15px}#trialHud .h span{font-size:10px;padding:0 6px;margin-right:5px;border-width:1.5px}#trialHud .d{display:none}
+  #trialHud .p{margin:0;gap:5px;font-size:13px}#trialHud .p i{padding:0 6px;border-width:1.5px}
+  #trialTip{left:8px;right:auto;top:108px;bottom:auto;max-width:200px;font-size:12px;padding:4px 8px;border-width:2px;line-height:1.35}
+}
+#touch .tb.hidden{display:none}
 </style>
 </head>
 <body>
@@ -237,9 +285,11 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   <div id="weaponHint" class="hidden"></div>
   <div id="replayTag" class="hidden">▶ 다시 보기 <small>클릭하거나 Space를 누르면 넘긴다</small></div>
   <div id="practice" class="hidden"><b>연습장</b><small>해 보면 지워진다 · Esc로 끝내기</small><ul id="practiceList"></ul></div>
+  <div id="trialHud" class="hidden"><div class="h"><span id="trialTag"></span><b id="trialTitle"></b></div><div class="d" id="trialGoal"></div><div class="p"><i id="trialTime"></i><i id="trialProg"></i></div></div>
+  <div id="trialTip" class="hidden"></div>
   <div id="toast" style="opacity:0"></div>
   <div id="speedo"><span class="gait">정지</span><span class="spd">0.0 m/s</span><span class="mana">마력 0</span><span class="fear"></span></div>
-  <div id="legend"><kbd>W</kbd><kbd>S</kbd> 박차·고삐 <kbd>A</kbd><kbd>D</kbd> 조향 <kbd>Shift</kbd> 질주(말의 숨)<br>좌클릭 누른 채 마우스 = 휘두르기 · 우클릭 누르기→떼기 = 마법<br><kbd>C</kbd> 누른 채 마우스 앞뒤 = 찌르기 · <kbd>Q</kbd> 누르고 있기 = 잡기<br><kbd>E</kbd> 말 타기·줍기 (휘두르는 중이면 던지기) · <kbd>Space</kbd> 숙이기 / 걸을 땐 발차기<br><kbd>Z</kbd> 표적 고정 <kbd>V</kbd> 시점 <kbd>F</kbd> 슬로 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기</div>
+  <div id="legend"><kbd>W</kbd><kbd>S</kbd> 박차·고삐 <kbd>A</kbd><kbd>D</kbd> 조향 <kbd>Shift</kbd> 질주(말의 숨)<br>좌클릭 누른 채 마우스 = 휘두르기 · 우클릭 누르기→떼기 = 마법<br><kbd>C</kbd> 누른 채 마우스 앞뒤 = 찌르기 · <kbd>Q</kbd> 누르고 있기 = 잡기<br><kbd>E</kbd> 말 타기·줍기 (휘두르는 중이면 던지기) · <kbd>Space</kbd> 숙이기 / 걸을 땐 발차기<br><kbd>R</kbd> 큰 마법(2차 전직 뒤) · <kbd>Z</kbd> 표적 고정 <kbd>V</kbd> 시점 <kbd>F</kbd> 슬로 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기</div>
 </div>
 
 <section id="title" class="screen hidden">
@@ -259,12 +309,14 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   <div class="hubTop"><h2>🐴 마구간</h2><span class="badge" id="rankBadge"></span><div class="bar" title="랭크 결정전까지"><i id="rankBar" style="width:0%"></i></div><span id="rankPts" class="note"></span><span class="gold" id="goldTxt">0</span></div>
   <div class="hubGrid">
     <div class="hubCol"><div class="card"><h3>마지와 고집이</h3>
-      <div class="note" id="hubStory">낙마만 일곱 번 한 견습 마법사 마지와 늙은 회색 암말 고집이. 봄 마상 대난투의 상금이 목장 빚이다.</div>
-      <div id="slots"></div>
-      <div class="note" id="tierNote"></div>
+      <div id="hubStats"></div>
+      <div id="hubSpells" class="spells"></div>
+      <div id="gearRow" class="gearRow"></div>
+      <div class="rule" id="hubRules"></div>
+      <div class="btnRow"><button id="shopBtn" class="shopBtn">🛒 상점</button></div>
     </div>
-    <div class="card"><h3>상점</h3><div class="shop" id="shop"></div>
-      <div class="note" style="margin-top:8px">하프소드 규칙: 낮은 등급 장비로 이길수록 포인트가 많다. 기절로 지면 가장 비싼 장비를 압수당하고, <kbd>G</kbd> 항복하면 잃는 건 없다.</div>
+    <div class="card"><div class="note" id="hubStory">낙마만 일곱 번 한 견습 마법사 마지와 늙은 회색 암말 고집이. 봄 마상 대난투의 상금이 목장 빚이다.</div>
+      <div class="note" style="margin-top:8px">하프소드 규칙: 낮은 등급 장비로 이길수록 포인트가 많다. 기절로 지면 가장 비싼 장비를 압수당하고, <kbd>G</kbd> 항복하면 잃는 건 없다. 전직은 압수되지 않는다.</div>
       <div class="btnRow"><button id="resetBtn" style="font-size:13px;padding:6px 10px">처음부터</button><button id="muteBtn" style="font-size:13px;padding:6px 10px">🔊 소리</button><button id="setBtn2" style="font-size:13px;padding:6px 10px">⚙ 설정</button><button id="titleBtn" style="font-size:13px;padding:6px 10px">처음 화면</button></div>
     </div></div>
     <div class="card fightCard"><h3 id="nextTitle"></h3>
@@ -276,6 +328,21 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
       <div class="btnRow"><button id="bossBtn" class="danger">👑 결정전</button></div>
     </div>
   </div>
+</div></section>
+
+<section id="shopScreen" class="screen hidden"><div class="panel">
+  <div class="hubTop"><h2>🛒 상점</h2><span class="note" id="shopNote"></span><span style="flex:1"></span><span class="gold" id="shopGold">0</span><button id="shopBack" style="font-size:14px;padding:6px 12px">← 마구간</button></div>
+  <div class="tabs"><button id="tabStaff" class="on">🪄 지팡이</button><button id="tabWear">🎩 옷·마구</button><span style="flex:1"></span><span class="note">📕 마법책은 상점에 없다 · 🔮 전직관에서 받는다</span></div>
+  <div class="cards" id="shopCards"></div>
+  <div class="card" id="shopDetail"></div>
+</div></section>
+
+<section id="jobs" class="screen hidden"><div class="panel">
+  <div class="hubTop"><h2>🔮 전직관</h2><span class="badge" id="jobsBadge">견습 졸업</span><span class="note" id="jobsNote"></span><span style="flex:1"></span><button id="jobsBack" style="font-size:14px;padding:6px 12px">← 마구간</button></div>
+  <div class="npc" id="jobsNpc"></div>
+  <div class="quiz hidden" id="jobsQuiz"></div>
+  <div class="jobs" id="jobCards"></div>
+  <div class="card" id="jobTrial"></div>
 </div></section>
 
 <section id="pre" class="screen hidden"><div class="panel">
@@ -335,6 +402,7 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
 <div id="touch" class="hidden">
   <div id="stick"><i></i></div>
   <div class="tb big" id="tbCast">마법<br>(누르기)</div>
+  <div class="tb hidden" id="tbBig">큰 마법</div>
   <div class="tb big" id="tbSwing">휘두르기<br>(누른 채<br>드래그)</div>
   <div class="tb" id="tbDuck">숙이기<br>발차기</div>
   <div class="tb" id="tbThrust">찌르기</div>

@@ -1,6 +1,6 @@
 // 코드로 만든 모델: 말 · 마법사 · 지팡이 (툰 셰이딩 + 뒤집은 껍데기 외곽선). 에셋 파일 없음
 import * as THREE from 'three';
-import { HORSES, ITEMS, CHARS, CFG } from './config.js';
+import { HORSES, ITEMS, CHARS, CFG, JOBS } from './config.js';
 
 let gradientMap = null;
 const matCache = new Map(), outCache = new Map();
@@ -158,7 +158,7 @@ function buildHat(id, color, parent) {
   }
   return hat;
 }
-export function buildWizard(charKey, loadout) {
+export function buildWizard(charKey, loadout, job = null) {
   const ch = CHARS[charKey];
   const root = new THREE.Group();
   const robe = ch.robe, skin = ch.skin, team = ch.color;
@@ -183,6 +183,13 @@ export function buildWizard(charKey, loadout) {
   if (charKey === 'dummy') part(new THREE.BoxGeometry(0.16, 0.02, 0.02), 0x6a4a20, head, { pos: [0, -0.07, 0.165], outline: 0 });
   const hat = buildHat(loadout.hat, loadout.hat === 'brass' ? 0xd4a446 : ch.hatColor, head);
   hat.position.y = 0.1;
+  if (job && JOBS[job]) {   // 전직: 원소 색 목도리, 모자 앞 문양, 허리춤 책
+    const jc = JOBS[job].color;
+    part(new THREE.TorusGeometry(0.2, 0.05, 6, 18), jc, torsoG, { pos: [0, 0.66, 0], rot: [Math.PI / 2, 0, 0], scale: [1, 0.9, 1], outline: 0.008 });
+    part(new THREE.BoxGeometry(0.09, 0.4, 0.02), jc, torsoG, { pos: [-0.08, 0.5, 0.19], rot: [0, 0, -0.25], outline: 0.006 });
+    part(new THREE.CircleGeometry(0.06, 12), jc, hat, { pos: [0, 0.14, 0.17], outline: 0 });
+    part(new THREE.BoxGeometry(0.16, 0.2, 0.06), jc, torsoG, { pos: [0.3, -0.05, -0.05], rot: [0, 0, 0.1], outline: 0.008 });
+  }
   return { root, head, hat, ch, big, armColor: robe, skin };
 }
 

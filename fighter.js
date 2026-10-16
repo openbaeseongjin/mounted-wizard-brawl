@@ -1,7 +1,7 @@
 // 말 · 기수 상체 · 무기: 물리 몸 만들기와 매 틱 제어 (하프소드식 능동 래그돌을 단순하게)
 // 좌표: y 위, 요 h의 앞 = (sin h, 0, cos h). 몸 로컬에서 앞 = +z, 오른쪽 = -x
 // v0.2: 무기는 따로 있는 물체(떨어뜨리고, 던지고, 줍는다) · 맨손 주먹 · 찌르기 자세 · 기운 · 잡기 · 발차기 · 넘어짐 · 래그돌 팔다리
-import { CFG, HORSES, ITEMS, CHARS } from './config.js';
+import { CFG, HORSES, ITEMS, CHARS, JOBS, SPELLS, slotsFor } from './config.js';
 import { v3, add, sub, scale, dot, cross, len, norm, clamp, clampLen, qRotate, qFromTo, yawQ, fwdOf, rightOf, yawOfQ, wrapAngle, hdist } from './rng.js';
 
 const Y = { x: 0, y: 1, z: 0 };
@@ -17,7 +17,7 @@ const NOLIMB = ALL & ~BIT(LIMB_BIT);
 const conj = (q) => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 export function idleInput() {
-  return { move: [0, 0], gallop: false, duck: false, look: [0, 0], swing: false, hand: [0, 0], charge: false, mount: false, surrender: false,
+  return { move: [0, 0], gallop: false, duck: false, look: [0, 0], swing: false, hand: [0, 0], charge: false, big: false, mount: false, surrender: false,
     thrust: false, reach: 0, grab: false, kick: false };
 }
 const SHOULDER_R = () => CFG.rider.shoulder;   // 오른쪽 어깨 (몸 로컬: 오른쪽 = -x)
@@ -28,7 +28,7 @@ export function shoulderWorld(f, left = false) {
   return add(tb.translation(), qRotate(tb.rotation(), toV(left ? SHOULDER_L() : SHOULDER_R())));
 }
 export const strength = (f) => CFG.stamina.minStrength + (1 - CFG.stamina.minStrength) * f.stam / 100;
-function drain(f, amt) { if (amt <= 0) return; f.stam = Math.max(0, f.stam - amt); f.stamIdle = 0; }
+export function drain(f, amt) { if (amt <= 0) return; f.stam = Math.max(0, f.stam - amt); f.stamIdle = 0; }
 
 // ---------- 말 ----------
 export function createHorse(m, k, defKey, pos, heading) {
@@ -177,16 +177,24 @@ export function createFighter(m, i, spec, horseK) {
   m.info.set(torso.handle, { kind: 'torso', i }); m.info.set(head.handle, { kind: 'head', i }); m.info.set(legs.handle, { kind: 'legs', i });
 
   const hat = ITEMS[loadout.hat], robe = ITEMS[loadout.robe], gear = ITEMS[loadout.gear];
+  // 전직(원소): 명단이 주면 그것, 아니면 캐릭터 기본값(세린의 'mimic'은 명단이 정한다)
+  const job0 = spec.job !== undefined ? spec.job : (ch.job === 'mimic' ? null : ch.job || null);
+  const job = job0 && JOBS[job0] ? job0 : null;
+  const jobTier = job ? (spec.jobTier !== undefined ? spec.jobTier : ch.jobTier || 0) : 0;
+  const bonus = job ? JOBS[job].bonus : {};
   const f = {
     i, char: spec.char, ch, loadout, isPlayer: !!spec.isPlayer, color: ch.color, mass: M, persona: spec.persona || ch.persona,
-    balance: ch.balance * (robe.balance || 1) * (gear.balance || 1), headMul: hat.headMul, torsoMul: robe.torsoMul,
+    balance: ch.balance * (robe.balance || 1) * (gear.balance || 1) * (bonus.balance || 1), headMul: hat.headMul, torsoMul: robe.torsoMul,
+    job, jobTier, slots: spec.slots || slotsFor(job, jobTier),
+    spellMul: bonus.spellMul || 1, hitMul: bonus.hitMul || 1, speedMul: (bonus.speedMul || 1) * (spec.speedMul || 1), wallW: spec.wallW || 0,
+    chargeSlot: null, holdOn: {}, whip: null, trailLast: null, trailT: 0, lastSpell: null,
     rider: { body, cols: { torso, head, legs }, state: 'mounted', t: 0, conscious: CFG.mind.max, lastHitT: -99, tiltT: 0, joint: null, mountK: -1, from: null },
     horse: -1, lastHorse: horseK, homeHorse: horseK,
     weapon: -1, fist: -1, staff: null,
     charge: 0, charging: false, look: [0, 0], hand: [0, 0], aimYaw: h.heading, aimPitch: 0, aimDir: fwdOf(h.heading),
     input: idleInput(), prevInput: idleInput(), mana: 0,
     stam: 100, stamIdle: 9, stagger: 0, kickCd: 0, kickT: 0, grab: null, ragdoll: null,
-    stats: { unhorsed: 0, kos: 0, deflectHits: 0, hits: 0, casts: 0, chargeSum: 0, swings: 0, fearSum: 0, fearN: 0, thrusts: 0, grabs: 0, kicks: 0, disarms: 0, throws: 0 },
+    stats: { unhorsed: 0, kos: 0, deflectHits: 0, hits: 0, casts: 0, chargeSum: 0, swings: 0, fearSum: 0, fearN: 0, thrusts: 0, grabs: 0, kicks: 0, disarms: 0, throws: 0, spells: {} },
     out: false, surrendered: false, lastHitBy: null, hitCd: new Map(), brain: null,
   };
   const S = add(hip, qRotate(yawQ(h.heading), toV(SHOULDER_R())));
@@ -226,7 +234,7 @@ export function unhorse(m, f, cause) {
   if (f.rider.joint) { m.world.removeImpulseJoint(f.rider.joint, true); f.rider.joint = null; }
   h.rider = -1; h.panicT = CFG.horse.panicT; h.wanderYaw = h.heading; h.wanderT = 0;
   f.horse = -1;
-  f.rider.state = 'flying'; f.rider.t = 0; f.charging = false; f.charge = 0;
+  f.rider.state = 'flying'; f.rider.t = 0; f.charging = false; f.charge = 0; f.chargeSlot = null; f.whip = null; f.trailLast = null;
   releaseGrab(m, f);
   setRiderGroups(f); setHorseGroups(h);
   // 살짝 튕겨 오르게 (코미디)
@@ -234,7 +242,8 @@ export function unhorse(m, f, cause) {
   spawnRagdoll(m, f);
   const by = f.lastHitBy && m.t - f.lastHitBy.t < 2.5 ? f.lastHitBy.i : -1;
   if (by >= 0) m.fighters[by].stats.unhorsed++;
-  m.emit({ type: 'unhorse', i: f.i, by, cause, pos: f.rider.body.translation() });
+  const spell = f.lastSpell && m.t - f.lastSpell.t < 3 ? f.lastSpell.spell : null;
+  m.emit({ type: 'unhorse', i: f.i, by, cause, spell, pos: f.rider.body.translation() });
 }
 // 걸어서 싸우다 크게 맞으면 넘어진다
 export function knockDown(m, f, cause, by = -1) {
@@ -258,7 +267,7 @@ export function knockOut(m, f, by) {
   if (f.horse >= 0) unhorse(m, f, 'ko');
   releaseGrab(m, f);
   if (f.weapon >= 0) dropWeapon(m, f, 'ko');
-  f.rider.state = 'ko'; f.rider.t = 0; f.out = true; f.charging = false; f.charge = 0;
+  f.rider.state = 'ko'; f.rider.t = 0; f.out = true; f.charging = false; f.charge = 0; f.chargeSlot = null; f.whip = null;
   setRiderGroups(f);
   spawnRagdoll(m, f);
   if (by >= 0 && by !== f.i) m.fighters[by].stats.kos++;
@@ -271,6 +280,13 @@ export function revive(m, f) {
   f.rider.conscious = 70; f.out = false; f.rider.state = 'getup'; f.rider.t = 0; f.stam = 100;
   setRiderGroups(f);
   m.emit({ type: 'revive', i: f.i });
+}
+
+// 마법 원인 기록: 누가 어떤 마법으로 밀거나 겁줬는지. 낙마 사건이 3초 안의 기록을 싣는다
+export function tag(m, g, by, spell) {
+  if (!g || by === undefined || by < 0 || by === g.i) return;
+  g.lastSpell = { i: by, spell, t: m.t };
+  g.lastHitBy = { i: by, t: m.t };
 }
 
 // 피해: part = head | torso | legs | blast
@@ -540,15 +556,9 @@ export function controlFighter(m, f, dt) {
   if ((st === 'mounted' || st === 'foot') && !frozen && edge('grab')) tryGrab(m, f);
   updateGrab(m, f, dt);
 
-  // 마력 모으기 / 쏘기 — 지팡이가 있어야 한다
+  // 마법 — 지팡이가 있어야 한다. 슬롯별 누르는 법은 magic.js(castStep)가 맡는다
   const canCast = (rs.state === 'mounted' || rs.state === 'foot') && !inp.duck && !inp.thrust && !frozen && f.weapon >= 0;
-  if (inp.charge && canCast) {
-    f.charging = true;
-    f.charge = Math.min(CFG.spell.fMax, f.charge + CFG.spell.chargeRate * dt);
-  } else if (f.charging) {
-    if (canCast && f.charge >= CFG.spell.minF) { drain(f, f.charge * SA.cast); m.release(f); }
-    f.charging = false; f.charge = 0;
-  }
+  m.castStep(f, dt, canCast);
   if (inp.swing && !f.prevInput.swing) f.stats.swings++;
   if (inp.thrust && !f.prevInput.thrust) f.stats.thrusts++;
   // 기운: 빠르게 휘두르거나 찌르면 줄고, 쉬면 찬다
@@ -663,6 +673,17 @@ export function updateLooseWeapons(m, dt) {
   }
 }
 
+// 빙판에서 급히 틀다 미끄러짐: 말은 비틀거리고 기수는 하던 속도로 떨어진다
+function slipOnIce(m, h, rider) {
+  const S = SPELLS.ice, v = h.body.linvel();
+  h.slipCd = 1.5; h.stagger = Math.max(h.stagger, 1.0);
+  h.fear = Math.min(100, h.fear + S.slipFear * h.def.fearGain);
+  tag(m, rider, h.iceBy, 'ice');
+  m.emit({ type: 'slip', k: h.k, i: rider.i, pos: h.body.translation() });
+  unhorse(m, rider, 'ice');
+  rider.rider.body.setLinvel({ x: v.x, y: 2.5, z: v.z }, true);
+}
+
 // 말 제어: 탄 사람의 입력, 주인 잃은 말의 질주, 쉬는 말
 export function controlHorse(m, h, dt) {
   const H = CFG.horse, def = h.def, b = h.body, HS = CFG.horseStam;
@@ -673,7 +694,7 @@ export function controlHorse(m, h, dt) {
   h.gait += (h.speed / (1.4 + h.speed * 0.2)) * dt;   // 걸음 박자 (보기·들썩임)
   const rider = h.rider >= 0 ? m.fighters[h.rider] : null;
   const gear = rider ? ITEMS[rider.loadout.gear] : ITEMS.nogear;
-  const accel = def.accel * (gear.accelMul || 1), speedMul = gear.speedMul || 1;
+  const accel = def.accel * (gear.accelMul || 1), speedMul = (gear.speedMul || 1) * (rider ? rider.speedMul || 1 : 1);
   const fearCut = 1 - CFG.fear.speedCut * h.fear / 100;
   let steer = 0, galloping = false;
   if (m.t < 0) {
@@ -714,12 +735,16 @@ export function controlHorse(m, h, dt) {
   else h.stam = Math.min(100, h.stam + (h.speed < 5 ? HS.regenSlow : HS.regenCruise) * dt);
   if (!h.winded && h.stam <= 0) { h.winded = true; m.emit({ type: 'winded', k: h.k, i: h.rider }); }
   if (h.winded && h.stam >= HS.recover) h.winded = false;
+  h.slipCd = Math.max(0, (h.slipCd || 0) - dt);
+  // 빙판: 속도 따라잡기·옆 미끄럼 잡기·회전을 줄여 하던 속도로 미끄러진다. 빠르게 달리며 급히 틀면 넘어진다
+  const ice = h.onIce ? SPELLS.ice.grip : 1;
+  if (h.onIce && rider && rider.rider.state === 'mounted' && h.speed > SPELLS.ice.slipV && Math.abs(steer) > SPELLS.ice.slipTurn && h.slipCd <= 0) slipOnIce(m, h, rider);
   h.fear = Math.max(0, h.fear - CFG.fear.decay * dt);
   if (h.stagger > 0) { h.stagger -= dt; return; }
-  const dv = clamp(h.cruise - fwd, -accel * 2.5 * dt, accel * dt);
-  const nf = fwd + dv, ns = side * Math.max(0, 1 - H.grip * dt);
+  const dv = clamp(h.cruise - fwd, -accel * 2.5 * dt * ice, accel * dt * ice);
+  const nf = fwd + dv, ns = side * Math.max(0, 1 - H.grip * ice * dt);
   b.setLinvel({ x: fw.x * nf + rt.x * ns, y: v.y, z: fw.z * nf + rt.z * ns }, true);
-  const turnMax = def.turn / (1 + Math.abs(fwd) / 9);
+  const turnMax = def.turn / (1 + Math.abs(fwd) / 9) * ice;
   b.setAngvel({ x: 0, y: -clamp(steer, -1, 1) * turnMax, z: 0 }, true);
 }
 // 원하는 요로 돌리는 조향값 (오른쪽 = +1)

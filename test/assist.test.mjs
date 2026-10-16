@@ -86,3 +86,16 @@ test('줍기: 맨손이면 버튼이 "줍기"가 되고, 누르고 있으면 말
   assert.ok(ev.some((e) => e.type === 'pickup' && e.i === 0), '주웠다');
   assert.ok(p.weapon >= 0);
 });
+
+test('원소: 큰 마법(Q)은 big 입력, 돌풍 금색은 0.5 이상·3.5m 안, 버튼 글은 마법 이름', async () => {
+  const m = await makeMatch({ roster: [{ char: 'maji', isPlayer: true, job: 'wind', jobTier: 2 }, { char: 'dummy', isPlayer: true }],
+    spawns: [{ x: 0, z: 0, heading: 0 }, { x: 0, z: 3, heading: 0 }], props: false });
+  const as = createAssist(m, 0);
+  const step = (patch) => { const inp = as.step(intent(patch), 1 / 60); m.step({ 0: inp, 1: idleInput() }); return inp; };
+  assert.equal(step({ big: true }).big, true);
+  step({});
+  for (let k = 0; k < 56; k++) step({ cast: true });   // 금색은 그 틱 시작의 모은 양으로 본다
+  assert.ok(m.fighters[0].charge >= 0.5, 'charge ' + m.fighters[0].charge);
+  assert.equal(as.ui.gold, true);
+  assert.equal(as.ui.castLabel, '돌풍'); assert.equal(as.ui.bigLabel, '회오리'); assert.equal(as.ui.bigOk, true);
+});

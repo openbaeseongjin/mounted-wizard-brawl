@@ -78,13 +78,13 @@ export const STARTER = { staff: 'stick', hat: 'oldcone', robe: 'rags', gear: 'no
 
 // 기수(사람 + 기본 말 + 기본 장비 + 성격)
 export const CHARS = {
-  maji: { name: '마지', color: 0x3d7bff, css: '#3d7bff', horse: 'gojip', mass: 66, balance: 1.0, persona: 'player', loadout: STARTER, robe: 0x3d6fe0, hatColor: 0x2a3f8f, skin: 0xf2c9a0, hair: 0x6b3b1e },
-  dummy: { name: '허수아비 마법사', color: 0xd9c27a, css: '#d9c27a', horse: 'nag', mass: 60, balance: 0.8, persona: 'dummy', loadout: STARTER, robe: 0xcdb46a, hatColor: 0x8a7440, skin: 0xe6d08a, hair: 0xe0c060 },
-  mukjik: { name: '묵직이', color: 0xe8483b, css: '#e8483b', horse: 'bigred', mass: 95, balance: 1.3, persona: 'heavy', loadout: { staff: 'iron', hat: 'oldcone', robe: 'rags', gear: 'nogear' }, robe: 0xd63a2f, hatColor: 0x7d1c16, skin: 0xe8b48a, hair: 0x3a2414 },
-  boss1: { name: '마구간 대장 묵직이', color: 0xe8483b, css: '#e8483b', horse: 'bigred', mass: 100, balance: 1.5, persona: 'heavy', loadout: { staff: 'mace', hat: 'brass', robe: 'quilted', gear: 'saddle' }, robe: 0xb52a22, hatColor: 0xc9a14a, skin: 0xe8b48a, hair: 0x3a2414, boss: true },
-  beongae: { name: '번개', color: 0xf2c230, css: '#f2c230', horse: 'pony', mass: 58, balance: 0.85, persona: 'quick', loadout: { staff: 'oak', hat: 'felt', robe: 'rags', gear: 'spurs' }, robe: 0xf0b820, hatColor: 0x9c6b00, skin: 0xf5d0a8, hair: 0xd8892c },
-  gihoe: { name: '기회주의자', color: 0x3cbf6a, css: '#3cbf6a', horse: 'black', mass: 68, balance: 1.0, persona: 'sneaky', loadout: { staff: 'crystal', hat: 'oldcone', robe: 'quilted', gear: 'nogear' }, robe: 0x2f9e57, hatColor: 0x1d4d2e, skin: 0xd9a87e, hair: 0x1a1a1a },
-  rival: { name: '라이벌 세린', color: 0xa060f0, css: '#a060f0', horse: 'bay', mass: 66, balance: 1.15, persona: 'rival', loadout: { staff: 'lance', hat: 'felt', robe: 'quilted', gear: 'saddle' }, robe: 0x8a4fe0, hatColor: 0x4a2380, skin: 0xf0c8a0, hair: 0xe8e0f0, boss: true },
+  maji: { name: '마지', color: 0x3d7bff, css: '#3d7bff', horse: 'gojip', mass: 66, balance: 1.0, persona: 'player', loadout: STARTER, robe: 0x3d6fe0, hatColor: 0x2a3f8f, skin: 0xf2c9a0, hair: 0x6b3b1e, job: null, jobTier: 0 },
+  dummy: { name: '허수아비 마법사', color: 0xd9c27a, css: '#d9c27a', horse: 'nag', mass: 60, balance: 0.8, persona: 'dummy', loadout: STARTER, robe: 0xcdb46a, hatColor: 0x8a7440, skin: 0xe6d08a, hair: 0xe0c060, job: null, jobTier: 0 },
+  mukjik: { name: '묵직이', color: 0xe8483b, css: '#e8483b', horse: 'bigred', mass: 95, balance: 1.3, persona: 'heavy', loadout: { staff: 'iron', hat: 'oldcone', robe: 'rags', gear: 'nogear' }, robe: 0xd63a2f, hatColor: 0x7d1c16, skin: 0xe8b48a, hair: 0x3a2414, job: 'wind', jobTier: 1 },
+  boss1: { name: '마구간 대장 돌쇠', color: 0xb08850, css: '#b08850', horse: 'bigred', mass: 100, balance: 1.5, persona: 'heavy', loadout: { staff: 'mace', hat: 'brass', robe: 'quilted', gear: 'saddle' }, robe: 0x8a5a30, hatColor: 0x4a3018, skin: 0xe8b48a, hair: 0x9a948c, boss: true, job: 'earth', jobTier: 2 },
+  beongae: { name: '번개', color: 0xf2c230, css: '#f2c230', horse: 'pony', mass: 58, balance: 0.85, persona: 'quick', loadout: { staff: 'oak', hat: 'felt', robe: 'rags', gear: 'spurs' }, robe: 0xf0b820, hatColor: 0x9c6b00, skin: 0xf5d0a8, hair: 0xd8892c, job: 'fire', jobTier: 1 },
+  gihoe: { name: '기회주의자', color: 0x3cbf6a, css: '#3cbf6a', horse: 'black', mass: 68, balance: 1.0, persona: 'sneaky', loadout: { staff: 'crystal', hat: 'oldcone', robe: 'quilted', gear: 'nogear' }, robe: 0x2f9e57, hatColor: 0x1d4d2e, skin: 0xd9a87e, hair: 0x1a1a1a, job: 'water', jobTier: 1 },
+  rival: { name: '라이벌 세린', color: 0xa060f0, css: '#a060f0', horse: 'bay', mass: 66, balance: 1.15, persona: 'rival', loadout: { staff: 'lance', hat: 'felt', robe: 'quilted', gear: 'saddle' }, robe: 0x8a4fe0, hatColor: 0x4a2380, skin: 0xf0c8a0, hair: 0xe8e0f0, boss: true, job: 'mimic', jobTier: 0 },
 };
 
 // AI 성격 값
@@ -96,6 +96,11 @@ export const PERSONAS = {
   sneaky: { chargeGoal: 0.45, castEvery: 0, cone: 0.3, deflect: 0.35, swing: 0.8, gallop: true, passOffset: 2.2, react: 0.35, thrust: false, grab: 0.5, throw: 0.05, kick: 0.4, parry: 0.35 },
   rival: { chargeGoal: 0.45, castEvery: 0, cone: 0.3, deflect: 0.5, swing: 0.85, gallop: true, passOffset: 2.0, react: 0.3, thrust: true, grab: 0.35, throw: 0.1, kick: 0.4, parry: 0.5 },
   still: { chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: false, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0, still: true },
+  // 전직 시험용: 공격 없이 움직이기만 (circle 돌기 · rush 정면 질주 · swarm 옆에 붙기 · flee 달아나기)
+  circle: { mode: 'circle', r: 18, r2: 0, speed: 0.75, chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: false, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0 },
+  rush: { mode: 'rush', chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: true, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0 },
+  swarm: { mode: 'swarm', chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: true, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0 },
+  flee: { mode: 'flee', chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: true, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0 },
 };
 
 // 건틀릿 사다리 (데모: 랭크 2단계)
@@ -108,8 +113,8 @@ export const LADDER = [
       { id: 'f2', title: '3인 난투', mode: 'brawl', opp: ['mukjik', 'beongae'], base: 150, seed: 21,
         line: ['마지', '둘이 싸우게 두고… 느려진 쪽을 노리자.'] },
     ],
-    boss: { id: 'b1', title: '랭크 결정전: 마구간 대장 묵직이', mode: 'duel', opp: ['boss1'], base: 200, seed: 31,
-      line: ['묵직이', '견습 주제에 내 마구간을 넘봐? 정면으로 와라!'] },
+    boss: { id: 'b1', title: '랭크 결정전: 마구간 대장 돌쇠', mode: 'duel', opp: ['boss1'], base: 200, seed: 31,
+      line: ['돌쇠', '견습 주제에 내 마구간을 넘봐? 땅이 너를 막을 거다.'] },
   },
   {
     name: '시골 기수', unlock: 450,
@@ -118,6 +123,7 @@ export const LADDER = [
         line: ['마지', '셋이 다 나만 보면 어쩌지… 아니, 서로 싸우겠지.'] },
       { id: 'f4', title: '4인 난투: 비 온 뒤', mode: 'brawl', opp: ['gihoe', 'beongae', 'mukjik'], base: 200, seed: 51,
         oppLoadout: { beongae: { staff: 'crystal', hat: 'felt', robe: 'quilted', gear: 'spurs' } },
+        oppJob: { beongae: ['fire', 2] },
         line: ['고집이', '(푸르르… 오늘은 땅이 무르다)'] },
     ],
     boss: { id: 'b2', title: '결승: 라이벌 세린', mode: 'duel', opp: ['rival'], base: 250, seed: 61, final: true,
@@ -125,3 +131,29 @@ export const LADDER = [
   },
 ];
 export const RANK_NAMES = ['마구간 견습', '시골 기수', '봄 시합 챔피언'];
+
+// ---------- 4원소 전직 (설계: superpowers/specs/2026-10-16-mw-job-advancement-design.md) ----------
+export const JOB_ORDER = ['fire', 'water', 'wind', 'earth'];
+export const JOBS = {
+  fire: { name: '불 마법사', short: '불', icon: '🔥', color: 0xff7a50, css: '#ff7a50', spells: ['fireball', 'firetrail'], bonus: { spellMul: 1.15 }, bonusTxt: '✨ 마법 +15%', beats: 'wind', range: '8~20m', role: '말을 겁준다' },
+  water: { name: '물 마법사', short: '물', icon: '💧', color: 0x4aa8ff, css: '#4aa8ff', spells: ['whip', 'ice'], bonus: { speedMul: 1.05 }, bonusTxt: '🔋 마력통 +10%', beats: 'fire', range: '8~14m', role: '당기고 미끄러뜨린다' },
+  wind: { name: '바람 마법사', short: '바람', icon: '💨', color: 0x7fd8b0, css: '#7fd8b0', spells: ['gust', 'tornado'], bonus: { hitMul: 1.2 }, bonusTxt: '⚔ 타격 +20%', beats: 'earth', range: '3~5m', role: '밀고 빨아들인다' },
+  earth: { name: '땅 마법사', short: '땅', icon: '🪨', color: 0xb08850, css: '#b08850', spells: ['wall', 'fissure'], bonus: { balance: 1.15 }, bonusTxt: '🛡 버티기 +15%', beats: 'water', range: '8~16m', role: '막고 넘어뜨린다' },
+};
+// press: charge(모았다 떼기) | hold(누르고 있는 동안)
+export const SPELLS = {
+  orb: { name: '마력탄', icon: '🔵', press: 'charge' },
+  fireball: { name: '화염구', icon: '🔥', press: 'charge', speedMul: 0.8, blastMul: 1.3, fearMul: 2, burnR0: 2, burnR1: 3, burnT: 2.5, burnFear: 40 },
+  firetrail: { name: '불길', icon: '🔥', press: 'hold', costPerS: 0.12, every: 0.1, life: 3, r: 0.7, fearK: 60, vRef: 13 },
+  whip: { name: '물채찍', icon: '💧', press: 'hold', range: 14, aimTol: 0.06, cost: 0.20, costPerS: 0.10, maxT: 2.5, pullK: 600, fMax: 2400, slowShare: 0.3 },   // 끄는 힘 = pullK × 속도 차이(N), 느린 쪽이 다 받고 빠른 쪽은 slowShare
+  ice: { name: '빙판', icon: '🧊', press: 'charge', minF: 0.25, near: 8, far: 16, r0: 3, r1: 6, life: 6, grip: 0.15, slipV: 9, slipTurn: 0.6, slipFear: 40 },
+  gust: { name: '돌풍', icon: '💨', press: 'charge', minF: 0.5, r0: 3, r1: 5, jK: 1.6, knockJ: 70, horseK: 0.6, up: 0.35 },   // knockJ: 탄 기수가 이만큼 넘는 충격을 받으면 떨어진다 (말과 묶여 있어 밀기만으로는 안 떨어진다)
+  tornado: { name: '회오리', icon: '🌪️', press: 'charge', minF: 0.4, life: 3, vMin: 4, vMax: 14, rPull: 5, rCore: 1.2, pullK: 0.9, liftK: 1.4, fireFear: 30 },
+  wall: { name: '흙벽', icon: '🧱', press: 'charge', minF: 0.25, near: 8, far: 14, w: 4, thick: 0.6, h0: 1.0, h1: 2.2, rise: 0.25, life: 6, sink: 0.4, crashV: 5 },
+  fissure: { name: '땅가르기', icon: '⛰️', press: 'charge', minF: 0.15, maxF: 0.6, len0: 6, len1: 16, speed: 25, w: 1.5, fearK: 100, vRef: 13, tripV: 9 },
+};
+export function slotsFor(job, tier) {
+  if (!job || !JOBS[job] || !(tier > 0)) return { main: 'orb', big: null };
+  const [a, b] = JOBS[job].spells;
+  return { main: a, big: tier >= 2 ? b : null };
+}

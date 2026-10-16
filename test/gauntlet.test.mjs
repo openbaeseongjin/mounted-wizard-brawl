@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newCareer, currentFights, applyResult, lootOptions, takeLoot, buy, equip, tierSum, rivalMimic, buildRoster } from '../gauntlet.js';
+import { newCareer, currentFights, applyResult, lootOptions, takeLoot, buy, equip, tierSum, rivalMimic, buildRoster, jobOffer, chooseJob, passTrial, failTrial, normalizeCareer, slotsFor } from '../gauntlet.js';
 import { LADDER } from '../config.js';
 
 const stats = (o = {}) => ({ unhorsed: 0, kos: 0, deflectHits: 0, hits: 0, casts: 0, chargeSum: 0, swings: 0, fearSum: 0, fearN: 0, ...o });
@@ -87,4 +87,36 @@ test('라이벌은 플레이어의 평균 충전 비율을 따라 한다', () =>
   const mm = rivalMimic(c);
   assert.ok(Math.abs(mm.chargeGoal - 0.6) < 1e-9); assert.ok(mm.swing > 0.7);
   assert.equal(buildRoster(c, LADDER[1].boss)[1].char, 'rival');
+});
+
+test('전직: 첫 승리 뒤 1차 제안 → 고르고 통과 → 랭크업 뒤 2차 제안', () => {
+  let c = newCareer();
+  assert.equal(jobOffer(c), 0);
+  c = applyResult(c, LADDER[0].fights[0], result({ won: true })).career;
+  assert.equal(jobOffer(c), 1);
+  assert.ok(chooseJob(c, 'earth')); assert.ok(chooseJob(c, 'wind'));   // 통과 전에는 다시 고를 수 있다
+  assert.equal(failTrial(c, { id: 'wind1' }), 1);
+  assert.ok(passTrial(c, { id: 'wind1', job: 'wind', tier: 1 }));
+  assert.equal(c.jobTier, 1); assert.equal(chooseJob(c, 'fire'), false);
+  assert.equal(jobOffer(c), 0);
+  c.rank = 1; assert.equal(jobOffer(c), 2);
+  assert.ok(passTrial(c, { id: 'wind2', job: 'wind', tier: 2 })); assert.equal(jobOffer(c), 0);
+});
+
+test('압수는 전직을 건드리지 않고, 옛 저장은 견습으로 이어 간다', () => {
+  const c = newCareer(); c.gold = 500; buy(c, 'iron'); equip(c, 'iron'); c.job = 'fire'; c.jobTier = 1;
+  const ko = applyResult(c, LADDER[0].fights[1], result({ won: false }));
+  assert.equal(ko.career.job, 'fire'); assert.equal(ko.career.jobTier, 1);
+  const old = { rank: 0, points: 0, gold: 0, loadout: { staff: 'stick', hat: 'oldcone', robe: 'rags', gear: 'nogear' }, inventory: [], fightIdx: 1, wins: 1, losses: 0, log: [] };
+  const n = normalizeCareer(old);
+  assert.equal(n.job, null); assert.equal(n.jobTier, 0); assert.deepEqual(n.trials, {}); assert.equal(jobOffer(n), 1);
+});
+
+test('명단: 내 슬롯, AI 원소, f4 번개 2차, 세린은 내 원소', () => {
+  const c = newCareer(); c.job = 'water'; c.jobTier = 2; c.rank = 1;
+  const r4 = buildRoster(c, LADDER[1].fights[1]);
+  assert.deepEqual(r4[0].slots, { main: 'whip', big: 'ice' });
+  const bg = r4.find((x) => x.char === 'beongae'); assert.deepEqual(bg.slots, { main: 'fireball', big: 'firetrail' });
+  const fin = buildRoster(c, LADDER[1].boss); assert.equal(fin[1].job, 'water'); assert.deepEqual(fin[1].slots, { main: 'whip', big: 'ice' });
+  assert.deepEqual(slotsFor('fire', 1), { main: 'fireball', big: null });
 });

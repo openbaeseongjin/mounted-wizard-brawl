@@ -3,3 +3,4 @@ node_modules/
 test/_*.mjs
 __pycache__/
 *.log
+.playwright-mcp/

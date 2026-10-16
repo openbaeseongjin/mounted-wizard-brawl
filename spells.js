@@ -1,22 +1,28 @@
 // 주문: 마력 = 운동에너지. 쏘면 그만큼 느려지고, 지팡이로 후려치면 되돌아간다
-import { CFG } from './config.js';
+import { CFG, SPELLS } from './config.js';
 import { v3, add, sub, scale, dot, len, norm, clamp, qRotate } from './rng.js';
-import { kineticEnergy, hurt, staffTip, weaponTip, footImpact } from './fighter.js';
+import { kineticEnergy, hurt, staffTip, weaponTip, footImpact, tag } from './fighter.js';
+import { addZone } from './zones.js';
 
 const Y = { x: 0, y: 1, z: 0 };
 
-export function releaseCharge(m, f) {
-  const SP = CFG.spell, frac = clamp(f.charge, 0, SP.fMax);
-  const E = kineticEnergy(m, f), Es = frac * E * (f.staff.item.spellMul || 0);
-  // 반동: E ∝ v² 이므로 속도는 √(1−f)
+// 마력 쓰기: E ∝ v² 이므로 frac만큼 쓰면 속도는 √(1−frac). 말·기수·지팡이를 같이 늦춰야 기수의 운동량이 말을 다시 끌지 않는다
+// 돌려주는 값 = 쓴 에너지 × 지팡이 마법 배율 × 전직 보너스 (마법 위력)
+export function spendKE(m, f, frac) {
+  frac = clamp(frac, 0, 0.95);
+  const E = kineticEnergy(m, f), Es = frac * E * (f.staff.item.spellMul || 0) * (f.spellMul || 1);
   const k = Math.sqrt(1 - frac);
   const slow = (body) => { const v = body.linvel(); body.setLinvel({ x: v.x * k, y: v.y, z: v.z * k }, true); };
-  if (f.horse >= 0) {   // 말·기수·지팡이를 같이 늦춰야 기수의 운동량이 말을 다시 끌지 않는다
-    const h = m.horses[f.horse];
-    slow(h.body); h.cruise *= k;
-    h.fear = Math.min(100, h.fear + frac * SP.castFear * h.def.fearGain);
-  }
+  if (f.horse >= 0) { const h = m.horses[f.horse]; slow(h.body); h.cruise *= k; }
   slow(f.rider.body); slow(f.staff.body);
+  return Es;
+}
+
+// 구슬 쏘기: 마력탄(orb) · 화염구(fireball)
+export function releaseCharge(m, f, kind = 'orb', fracIn = f.charge) {
+  const SP = CFG.spell, S = SPELLS[kind] || {}, frac = clamp(fracIn, 0, SP.fMax);
+  const Es = spendKE(m, f, frac);
+  if (f.horse >= 0) { const h = m.horses[f.horse]; h.fear = Math.min(100, h.fear + frac * SP.castFear * h.def.fearGain); }
   const tb = f.rider.body;
   tb.applyImpulseAtPoint(scale(f.aimDir, -SP.recoil * frac * 3), add(tb.translation(), { x: 0, y: 0.9, z: 0 }), true);
   const tip = staffTip(f), start = add(tip, scale(f.aimDir, 0.25));
@@ -37,12 +43,12 @@ export function releaseCharge(m, f) {
   const aimPoint = add(eye, scale(f.aimDir, dist));
   const dir = norm(sub(aimPoint, start));
   // 달리는 속도는 조준 방향 성분만 더한다 (조준점이 옆으로 밀리지 않게, 정면 돌진은 더 빠르게)
-  const vel = scale(dir, SP.speed + Math.max(0, carrier.x * dir.x + carrier.z * dir.z));
+  const vel = scale(dir, SP.speed * (S.speedMul || 1) + Math.max(0, carrier.x * dir.x + carrier.z * dir.z));
   const s = Math.sqrt(Es / SP.eRef);
-  const spell = { id: m.nextSpellId++, owner: f.i, pos: start, vel, r: SP.r0 + SP.rK * s, E: Es, age: 0, deflects: 0, grace: 0, frac, lastDeflector: -1 };
+  const spell = { id: m.nextSpellId++, owner: f.i, kind, pos: start, vel, r: SP.r0 + SP.rK * s, E: Es, age: 0, deflects: 0, grace: 0, frac, lastDeflector: -1 };
   m.spells.push(spell);
   f.stats.casts++; f.stats.chargeSum += frac;
-  m.emit({ type: 'cast', i: f.i, frac, E: Es, pos: spell.pos, id: spell.id });
+  m.emit({ type: 'cast', i: f.i, kind, frac, E: Es, pos: spell.pos, id: spell.id });
   return spell;
 }
 
@@ -104,7 +110,7 @@ function deflect(m, sp, g, w, pos) {
 
 // 폭발: 반경 안 몸통에 방사형 충격량, 의식 피해, 말 공포. 소품·떨어진 무기도 날린다
 export function explode(m, pos, sp, direct) {
-  const SP = CFG.spell, s = Math.sqrt(sp.E / SP.eRef), R = SP.blastR0 + SP.blastRK * s;
+  const SP = CFG.spell, S = SPELLS[sp.kind] || {}, s = Math.sqrt(sp.E / SP.eRef), R = (SP.blastR0 + SP.blastRK * s) * (S.blastMul || 1);
   const J0 = SP.jK * Math.sqrt(sp.E);
   const hitList = [];
   for (const f of m.fighters) {
@@ -124,13 +130,17 @@ export function explode(m, pos, sp, direct) {
     const part = isDirect && direct.kind === 'head' ? 'head' : 'torso';
     const dmg = J * SP.dmgK * (part === 'head' ? SP.headMul : 1);
     hurt(m, f, dmg, part, sp.owner === f.i ? -1 : sp.owner, 'spell');
+    if (sp.owner !== f.i) tag(m, f, sp.owner, sp.kind || 'orb');
     footImpact(m, f, J, sp.owner);
     if (sp.deflects > 0 && sp.owner !== f.i) m.fighters[sp.owner].stats.deflectHits++;
     hitList.push({ i: f.i, J, dmg });
   }
   for (const h of m.horses) {
     const p = h.body.translation(), d = len(sub(p, pos)), range = R * SP.fearRange;
-    if (d < range) h.fear = Math.min(100, h.fear + SP.fearBlast * (1 - d / range));
+    if (d < range) {
+      h.fear = Math.min(100, h.fear + SP.fearBlast * (S.fearMul || 1) * (1 - d / range));
+      if (h.rider >= 0 && h.rider !== sp.owner) tag(m, m.fighters[h.rider], sp.owner, sp.kind || 'orb');
+    }
     if (d < R + 1) {
       const k = 1 - d / (R + 1), J = J0 * k * 1.5;
       if (J > CFG.horse.staggerJ) h.stagger = Math.max(h.stagger, CFG.horse.staggerT);
@@ -145,5 +155,9 @@ export function explode(m, pos, sp, direct) {
   };
   for (const pr of m.props) push(pr.body, pr.body.mass());
   for (const w of m.weapons) if (w.holder < 0 && !w.isFist) push(w.body, w.mass);
-  m.emit({ type: 'explode', id: sp.id, owner: sp.owner, pos, r: R, E: sp.E, direct: direct ? direct.kind : 'world', hits: hitList, deflected: sp.deflects > 0 });
+  if (sp.kind === 'fireball') {   // 터진 자리에 불이 남는다: 말은 들어가지 않으려 하고, 들어가면 크게 놀란다
+    const r = S.burnR0 + (S.burnR1 - S.burnR0) * clamp((sp.frac || 0) / SP.fMax, 0, 1), c = { x: pos.x, y: 0, z: pos.z };
+    addZone(m, { kind: 'burn', a: c, b: c, r, life: S.burnT, owner: sp.owner });
+  }
+  m.emit({ type: 'explode', id: sp.id, owner: sp.owner, kind: sp.kind || 'orb', pos, r: R, E: sp.E, direct: direct ? direct.kind : 'world', hits: hitList, deflected: sp.deflects > 0 });
 }

@@ -4,8 +4,8 @@ import { vp, deltaToGame, toGame } from './viewport.js';
 
 export function createInput(canvas) {
   const keys = new Set(), edges = new Set();
-  const st = { lmb: false, rmb: false, dx: 0, dy: 0, locked: false, touch: false, stick: [0, 0], run: false, enabled: false };
-  const PREVENT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'KeyF', 'KeyG', 'KeyH', 'AltLeft', 'AltRight', 'KeyQ', 'KeyC']);
+  const st = { lmb: false, rmb: false, dx: 0, dy: 0, locked: false, touch: false, stick: [0, 0], run: false, big: false, enabled: false };
+  const PREVENT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'KeyF', 'KeyG', 'KeyH', 'AltLeft', 'AltRight', 'KeyQ', 'KeyC', 'KeyR']);
   addEventListener('keydown', (e) => {
     if (!st.enabled) return;
     if (PREVENT.has(e.code)) e.preventDefault();
@@ -77,6 +77,7 @@ export function createInput(canvas) {
       el.addEventListener('pointerup', rel); el.addEventListener('pointercancel', rel); el.addEventListener('pointerleave', rel);
     };
     hold('tbCast', () => { st.rmb = true; }, () => { st.rmb = false; });
+    hold('tbBig', () => { st.big = true; }, () => { st.big = false; });
     hold('tbSwing', () => { st.lmb = true; }, () => { st.lmb = false; });
     hold('tbDuck', () => { keys.add('Space'); edges.add('Space'); }, () => keys.delete('Space'));
     hold('tbThrust', () => keys.add('KeyC'), () => keys.delete('KeyC'));

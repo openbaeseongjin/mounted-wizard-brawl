@@ -20,6 +20,7 @@ export function createHud() {
     manaArc: $('manaArc'), chargeArc: $('chargeArc'), ghost: $('ghost'), arrows: $('arrows'), warn: $('warn'), vignette: $('vignette'), flash: $('flash'),
     lines: $('speedlines'), mountHint: $('mountHint'), legend: $('legend'), cross: $('cross'), hitmark: $('hitmark'), dmgDir: $('dmgDir'), ohb: $('ohb'), dmgNums: $('dmgNums'),
     stamArc: $('stamArc'), modeTag: $('modeTag'), weaponHint: $('weaponHint'), replayTag: $('replayTag'), practice: $('practice'), practiceList: $('practiceList'),
+    trialHud: $('trialHud'), trialTag: $('trialTag'), trialTitle: $('trialTitle'), trialGoal: $('trialGoal'), trialTime: $('trialTime'), trialProg: $('trialProg'), trialTip: $('trialTip'),
   };
   const C_STAM = 2 * Math.PI * 44;
   const lctx = el.lines.getContext('2d');
@@ -63,6 +64,7 @@ export function createHud() {
     else if (t < A.shrinkEnd) fence = `울타리가 조여 온다! 반지름 ${m.fenceR.toFixed(0)}m`;
     else fence = '울타리 최소 · 공간이 곧 마력';
     if (t > A.timeLimit - 30) fence = `판정까지 ${fmt(A.timeLimit - t)}`;
+    if (m.opts.mode === 'practice' || m.opts.mode === 'trial') fence = '';   // 연습장 · 시험: 울타리가 조이지 않는다
     el.timer.firstChild.nodeValue = fmt(t);
     el.timer.querySelector('small').textContent = fence;
     // 피통 (= 정신. 0이면 기절)
@@ -275,6 +277,10 @@ export function createHud() {
       if (t.className !== cls) { t.className = cls; t.lastChild.textContent = cls === 'gold' ? '떼기!' : ''; }
     },
     legend(on) { el.legend.classList.toggle('hidden', !on); },
+    // 전직 시험 안내판: info = { tag, title, goal } 또는 null
+    trial(info) { el.trialHud.classList.toggle('hidden', !info); el.trialTip.classList.toggle('hidden', !info); if (!info) return; el.trialTag.textContent = info.tag; el.trialTitle.textContent = info.title; el.trialGoal.textContent = info.goal; },
+    trialTip(text) { el.trialTip.innerHTML = tk(text); },
+    trialProgress(left, n, need) { const s = Math.max(0, Math.floor(left)); el.trialTime.textContent = '⏱ ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); el.trialProg.textContent = `${n} / ${need}`; },
     setLegend(html) { el.legend.innerHTML = html; },
     toggleLegend() { el.legend.classList.toggle('hidden'); },
     replay(on) { el.replayTag.classList.toggle('hidden', !on); },

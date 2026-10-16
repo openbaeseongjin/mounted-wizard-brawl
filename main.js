@@ -1,6 +1,6 @@
 // 「마상 마법 난투」 데모 · 연결: 화면 전환, 고정 틱 루프, 카메라(1인칭/3인칭), 사건 → 효과·소리·알림, 다시 보기, 설정, 건틀릿·자유 대전·연습장
 import * as THREE from 'three';
-import { TICK, CFG, CHARS, ITEMS, LADDER } from './config.js';
+import { TICK, CFG, CHARS, ITEMS, LADDER, JOBS, SPELLS, JOB_ORDER } from './config.js';
 import { createMatch } from './match.js';
 import { idleInput, knockOut } from './fighter.js';
 import { buildHorse, animateHorse, buildWizard, buildLimbs, buildStaff, placeSeg, solveIK } from './models.js';
@@ -12,7 +12,10 @@ import { createAudio } from './audio.js';
 import { makeFrame, buildVisuals, disposeVisuals, renderFrames, headKick, addBump, flashFighter } from './view.js';
 import { vp, rectToGame } from './viewport.js';
 import { createAssist } from './assist.js';
-import { newCareer, currentFights, buildRoster, applyResult, takeLoot, buy, equip, tierSum, tierMul, rivalMimic, rankName, SHOP } from './gauntlet.js';
+import { newCareer, normalizeCareer, currentFights, buildRoster, applyResult, takeLoot, buy, equip, tierSum, tierMul, rivalMimic, rankName, jobOffer, chooseJob, passTrial, failTrial, slotsFor } from './gauntlet.js';
+import { trialFor, trialMatchOpts } from './trials.js';
+import { statsFor } from './stats.js';
+import { createMagicView } from './magicView.js';
 
 const RAPIER_URL = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/+esm';
 const $ = (id) => document.getElementById(id);
@@ -43,7 +46,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(76, innerWidth / innerHeight, 0.05, 700);
 camera.rotation.order = 'YXZ';
 const arena = buildArena(scene, renderer, S.shadow === 'low' ? 'low' : 'high');
-const fx = createFx(scene), hud = createHud(), input = createInput(canvas), audio = createAudio();
+const fx = createFx(scene), hud = createHud(), input = createInput(canvas), audio = createAudio(), magicView = createMagicView(scene);
 audio.setVolume(S.vol);
 function applyShadow() {
   renderer.shadowMap.enabled = S.shadow !== 'off';
@@ -69,7 +72,7 @@ const SAVE = 'mw-demo-career-v1';
 let career = null;
 try { const s = localStorage.getItem(SAVE); if (s) career = JSON.parse(s); } catch (e) { career = null; }
 const hasSave = !!career;
-if (!career) career = newCareer();
+career = normalizeCareer(career);   // 옛 저장은 견습으로 이어 간다
 function save() { try { localStorage.setItem(SAVE, JSON.stringify(career)); } catch (e) { /* 저장 못 해도 계속 */ } }
 
 // ---------- 공통 도우미 ----------
@@ -85,7 +88,7 @@ const PERSONA_TXT = {
   rival: '네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.',
   still: '가만히 있는 연습 과녁.',
 };
-const VERSION = 'v0.3b';   // 시험 기록에 같이 적는다
+const VERSION = 'v0.4a';   // 시험 기록에 같이 적는다
 // 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
 let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };
@@ -100,7 +103,7 @@ const MAX_FRAMES = 300;
 let replay = null, pendingReplay = null, replayCd = 0, lastBig = null;
 const bumpsGrowing = [];
 function clearVisuals() { fx.clear(); disposeVisuals(scene, vis); vis = null; bumpsGrowing.length = 0; }
-function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); player = null; cam.swP = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
+function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); magicView.clear(); player = null; cam.swP = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
 
 // ---------- 카메라 ----------
 const cam = { pos: V(0, 3, -10), shake: 0, fovKick: 0, cineAng: 0, focus: V(), swP: null, swY: 0, swW: null };   // swP·swY·swW: 몸 흔들림 기준 (bodySway)
@@ -265,7 +268,7 @@ function commonKeys(dt) {
 }
 // 쉬운 조작 ↔ 고급 조작: 터치 버튼 모양·PC 안내를 바꾼다
 const TB_DEFAULT = { tbSwing: $('tbSwing').innerHTML, tbCast: $('tbCast').innerHTML, tbDuck: $('tbDuck').innerHTML }, LEGEND_ADV = $('legend').innerHTML;
-const LEGEND_SIMPLE = '<kbd>W</kbd> 질주 <kbd>S</kbd> 감속 <kbd>A</kbd><kbd>D</kbd> 방향 (말은 저절로 달린다) · 마우스 = 보기<br><b>우클릭</b> 마법: 누르고 있다가 조준선이 금색일 때 떼기<br><b>좌클릭</b> 휘두르기: 누르고 있으면 상대 옆으로 붙고, 금색일 때 떼기<br>(상황에 따라 쳐내기 · 줍기 · 타기 · 찌르기로 바뀜) · <kbd>Space</kbd> 피하기<br><kbd>V</kbd> 시점 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기 · 설정에서 고급 조작(하프소드식)';
+const LEGEND_SIMPLE = '<kbd>W</kbd> 질주 <kbd>S</kbd> 감속 <kbd>A</kbd><kbd>D</kbd> 방향 (말은 저절로 달린다) · 마우스 = 보기<br><b>우클릭</b> 마법: 누르고 있다가 조준선이 금색일 때 떼기 · <kbd>Q</kbd> 큰 마법(2차 전직 뒤)<br><b>좌클릭</b> 휘두르기: 누르고 있으면 상대 옆으로 붙고, 금색일 때 떼기<br>(상황에 따라 쳐내기 · 줍기 · 타기 · 찌르기로 바뀜) · <kbd>Space</kbd> 피하기<br><kbd>V</kbd> 시점 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기 · 설정에서 고급 조작(하프소드식)';
 let lastLbl = '';
 function applyControls() {
   document.body.classList.toggle('simple', !S.adv);
@@ -274,17 +277,19 @@ function applyControls() {
 }
 function simpleButtons(ui) {
   if (!input.st.touch) return;
-  const sw = ui.mode === 'arm' && ui.gold ? '떼기!' : ui.swingLabel, ca = !ui.castOk ? '지팡이<br>없음' : ui.mode === 'charge' && ui.gold ? '떼기!' : '마법';
-  const key = sw + '|' + ca + '|' + ui.dodgeLabel;
+  const sw = ui.mode === 'arm' && ui.gold ? '떼기!' : ui.swingLabel, ca = !ui.castOk ? '지팡이<br>없음' : ui.mode === 'charge' && ui.slot === 'main' && ui.gold ? '떼기!' : ui.castLabel;
+  const big = !ui.bigOk ? '' : ui.mode === 'charge' && ui.slot === 'big' && ui.gold ? '떼기!' : ui.bigLabel;
+  const key = sw + '|' + ca + '|' + ui.dodgeLabel + '|' + big;
   if (key === lastLbl) return;
   lastLbl = key;
   $('tbSwing').innerHTML = sw; $('tbCast').innerHTML = ca; $('tbDuck').innerHTML = ui.dodgeLabel;
+  $('tbBig').classList.toggle('hidden', !ui.bigOk); $('tbBig').innerHTML = big; $('tbBig').classList.toggle('gold', big === '떼기!');
   $('tbSwing').classList.toggle('gold', sw === '떼기!'); $('tbCast').classList.toggle('gold', ca === '떼기!'); $('tbCast').classList.toggle('off', !ui.castOk);
 }
 applyControls();
 function playerInput() {
   if (!S.adv && assist) {   // 쉬운 조작: 버튼 셋(좌클릭·E = 휘두르기, 우클릭 = 마법, Space = 피하기)을 assist가 입력으로 바꾼다
-    const inp = assist.step({ move: input.axes(), look: [ctl.yaw, ctl.pitch], cast: input.st.rmb, swing: input.st.lmb || input.held('KeyE'), dodge: input.held('Space') }, TICK);
+    const inp = assist.step({ move: input.axes(), look: [ctl.yaw, ctl.pitch], cast: input.st.rmb, big: input.held('KeyQ') || input.st.big, swing: input.st.lmb || input.held('KeyE'), dodge: input.held('Space') }, TICK);
     if (ctl.surrender) inp.surrender = true;
     return inp;
   }
@@ -297,6 +302,7 @@ function playerInput() {
   inp.swing = input.st.lmb && !inp.duck && !inp.thrust;
   inp.hand = [ctl.hand[0], ctl.hand[1]];
   inp.charge = input.st.rmb && !inp.swing && !inp.thrust;
+  inp.big = (input.held('KeyR') || input.st.big) && !inp.swing && !inp.thrust;
   inp.grab = input.held('KeyQ');
   inp.look = [ctl.yaw, ctl.pitch];
   if (ctl.mountReq) { inp.mount = true; ctl.mountReq = false; }
@@ -347,7 +353,7 @@ function handleEvents(evs) {
     switch (e.type) {
       case 'cast': {
         const f = F(e.i);
-        fx.flash(P, f.ch.color, 0.8 + e.frac * 2.2, 0.2);
+        fx.flash(P, e.kind === 'fireball' ? 0xff7a30 : f.ch.color, 0.8 + e.frac * 2.2, 0.2);
         audio.play('cast', P, 0.6 + e.frac * 0.7, e.frac);
         if (e.frac > 0.4) voice(f, 'huff', 0.7);
         if (e.i === pi && tst) { tst.casts++; if (player.horse >= 0 && match.horses[player.horse].speed / Math.sqrt(Math.max(0.05, 1 - e.frac)) > 9) tst.fast++; }   // 쏘기 전 속도로 질주 중이었나
@@ -355,7 +361,7 @@ function handleEvents(evs) {
         break;
       }
       case 'explode': {
-        const c = new THREE.Color(F(e.owner).ch.color).lerp(new THREE.Color(0xffffff), 0.3).getHex();
+        const c = e.kind === 'fireball' ? 0xff8a3a : new THREE.Color(F(e.owner).ch.color).lerp(new THREE.Color(0xffffff), 0.3).getHex();
         fx.explosion(P, c, e.r);
         audio.play('boom', P, 0.45 + Math.min(1, e.E / CFG.spell.eRef) * 0.8);
         const d = camera.position.distanceTo(P); cam.shake += Math.max(0, 1 - d / 22) * (0.25 + e.E / CFG.spell.eRef * 0.4);
@@ -425,7 +431,8 @@ function handleEvents(evs) {
         fx.dust(P, 8, 0xe8d2a8, 1);
         const v = f.rider.body.linvel(); flingHat(e.i, V(v.x * 0.6 + (Math.random() - 0.5) * 3, 4 + Math.random() * 3, v.z * 0.6 + (Math.random() - 0.5) * 3));
         const grabbed = by && by.grab && by.grab.kind === 'rider' && by.grab.i === f.i;
-        hud.feed(by && by !== f ? `🐴 ${CJ(by, '이/가')} ${CJ(f, '을/를')} ${grabbed ? '잡아 끌어내렸다!' : '낙마시켰다!'}` : `🐴 ${CJ(f, '이/가')} 말에서 떨어졌다!`);
+        const how = { gust: '돌풍으로 ', tornado: '회오리로 ', fissure: '땅가르기로 ', wall: '흙벽으로 ', whip: '물채찍으로 끌어 ', ice: '빙판에서 ', fireball: '화염구로 ', firetrail: '불길로 ', orb: '' }[e.spell] || '';
+        hud.feed(by && by !== f ? `🐴 ${CJ(by, '이/가')} ${CJ(f, '을/를')} ${grabbed ? '잡아 끌어내렸다!' : how + '낙마시켰다!'}` : `🐴 ${CJ(f, '이/가')} 말에서 떨어졌다!`);
         if (e.i === pi || e.by === pi || nearCam(P)) slowT = 0.65;
         if (e.i === pi && tst) tst.fell++;
         if (e.i === pi) { hud.center('낙마!', 1.4); hud.toast('떨어져도 끝이 아니다! 비틀대며 일어나서 빈 말 옆에서 <kbd>E</kbd>', 5); cam.shake += 0.6; }
@@ -463,6 +470,25 @@ function handleEvents(evs) {
         if (e.i === pi) { hud.toast('↩ 되받아치기! 휘두른 방향으로 날아간다', 2.5); hitStop = 0.06; tut.deflect = true; practiceTick('deflect'); }
         break;
       case 'surrender': hud.feed(`🏳 ${colorName(F(e.i))} 항복`); break;
+      // ---------- 4원소 마법 ----------
+      case 'gust': fx.explosion(P, 0xd8f5e8, e.r * 0.8); audio.play('whoosh', P, 1.2); audio.play('boom', P, 0.4); if (e.i === pi) { cam.shake += 0.3; tut.cast = true; } break;
+      case 'wallUp': fx.dust(P, 14, 0xb08850, 2.5); audio.play('propThud', P, 1); audio.play('thud', P, 0.8); if (e.i === pi) tut.cast = true; break;
+      case 'wallDown': fx.dust(P, 8, 0xb08850, 2); break;
+      case 'wallCrash': fx.burst(P, 0xb08850, 1.4, true); audio.play('thud', P, 1.3); audio.play('ooh', 0.9); hud.feed(`🧱 ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 흙벽에 박았다!`); if (e.i === pi) cam.shake += 0.7; break;
+      case 'whip': audio.play('throw', P, 0.9); fx.sparks(P, 0x6ad0ff, 10, 4); if (e.i === pi) tut.cast = true; if (e.j === pi) hud.toast(`😨 ${CJ(F(e.i), '이/가')} 물채찍으로 나를 묶었다! 더 빨리 달려라`, 2.5, 'whipped'); break;
+      case 'whipMiss': if (e.i === pi) hud.toast('물채찍이 빗나갔다 (14m 안의 상대를 겨눠라)', 1.6, 'wm'); break;
+      case 'whipCut': if (e.why !== 'release' && match.fighters[e.j]) fx.sparks(match.fighters[e.j].rider.body.translation(), 0x6ad0ff, 8, 3); break;
+      case 'iceUp': fx.flash(P, 0xbfe9ff, e.r * 1.5, 0.3); audio.play('ting', P, 0.8); if (e.i === pi) tut.cast = true; break;
+      case 'slip': fx.sparks(P, 0xffffff, 14, 5); audio.play('neigh', P, 0.9); hud.feed(`🧊 ${colorName(F(e.i))}의 말이 빙판에서 미끄러졌다!`); break;
+      case 'tornado': audio.play('whoosh', P, 1.4); if (e.i === pi) tut.cast = true; break;
+      case 'fireTornado': fx.flash(P, 0xff8a3a, 4, 0.4); hud.feed('🔥🌪️ 불 회오리!'); break;
+      case 'swallow': fx.flash(P, 0xd9b67c, 1, 0.2); break;
+      case 'fissure': audio.play('boom', P, 0.7); audio.play('thud', P, 1); fx.dust(P, 10, 0xb08850, 1.5); if (e.i === pi) { cam.shake += 0.25; tut.cast = true; } break;
+      case 'trip': fx.dust(P, 12, 0xb08850, 1.5); audio.play('neigh', P, 1); hud.feed(`⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 고꾸라졌다!`); break;
+      case 'trail': if (e.on) { audio.play('cast', P, 0.5, 0.2); if (e.i === pi) tut.cast = true; } break;
+      case 'zoneFear': if (e.add > 40) audio.play('neigh', P, 0.6); break;
+      case 'steam': fx.dust(P, 16, 0xffffff, 2); audio.play('whoosh', P, 0.8); hud.feed('♨️ 불과 얼음이 만나 김이 솟았다'); break;
+      case 'iceBreak': fx.sparks(P, 0xbfe9ff, 18, 6); audio.play('ting', P, 1); break;
       case 'getup': if (e.i === pi) hud.toast('일어났다! <kbd>WASD</kbd> 걷기 · <kbd>Shift</kbd> 뛰기 · <kbd>Space</kbd> 발차기 · 빈 말 옆에서 <kbd>E</kbd>', 3.5); break;
     }
   }
@@ -470,7 +496,7 @@ function handleEvents(evs) {
 
 // ---------- 다시 보기 (킬캠) ----------
 function queueReplay(focus) {
-  if (!S.replay || kind === 'practice' || replay || pendingReplay || replayCd > 0 || !match || match.over) return;
+  if (!S.replay || kind === 'practice' || kind === 'trial' || replay || pendingReplay || replayCd > 0 || !match || match.over) return;
   pendingReplay = { at: performance.now() / 1000 + 0.55, focus, tick: match.tick };
 }
 function startReplay(focus, tick, onDone) {
@@ -511,7 +537,7 @@ function tutorialTick() {
 }
 
 // ---------- 화면 ----------
-const screens = ['title', 'hub', 'pre', 'result', 'ending', 'pause', 'settings', 'free', 'rotateTip'];
+const screens = ['title', 'hub', 'pre', 'result', 'ending', 'pause', 'settings', 'free', 'rotateTip', 'shopScreen', 'jobs'];
 function show(id) { for (const s of screens) $(s).classList.toggle('hidden', s !== id); }
 let display = null;   // 마구간 화면의 말·마법사
 const _a = V(), _b = V(), _e = V();
@@ -522,7 +548,7 @@ function buildDisplay() {
   const g = new THREE.Group(); scene.add(g);
   const hv = buildHorse('gojip', CHARS.maji.color); g.add(hv.root);
   const y = (0.85 + 0.43) + 0.02; hv.root.position.set(0, y, 0);
-  const w = buildWizard('maji', career.loadout); g.add(w.root);
+  const w = buildWizard('maji', career.loadout, career.jobTier > 0 ? career.job : null); g.add(w.root);
   w.root.position.set(0, y + 0.47, -0.12);
   const st = buildStaff(career.loadout.staff); g.add(st.group);
   st.group.position.set(-0.45, y + 1.0, 0.3); st.group.rotation.set(0.35, 0, 0.25);
@@ -561,42 +587,125 @@ function itemDesc(id) {
   if (id === 'spurs') return '가속 ×1.3 · 공포 ×1.3';
   return '';
 }
+// ---------- 마구간 · 상점 · 전직관 ----------
+const SHOP_ICON = { stick: '🪵', oak: '🌳', iron: '⚙️', crystal: '💎', lance: '🔱', mace: '🔨', oldcone: '🎩', felt: '🎩', brass: '⛑️', rags: '👘', quilted: '🧥', nogear: '🐴', saddle: '🪑', spurs: '⭐' };
+const STAT_ROWS = [['hit', '⚔ 타격', 80], ['magic', '✨ 마법', 160], ['mana', '🔋 마력통', 100], ['hold', '🛡 버티기', 160]];
+function statBars(a, b, why = '') {   // a: 지금(또는 보너스 없는 값), b: 바꾼 뒤
+  return STAT_ROWS.map(([k, lb, max]) => {
+    const x = a[k], y = b[k], lo = Math.min(x, y), hi = Math.max(x, y), d = y - x, up = d > 0;
+    return `<div class="srow"><span class="lb">${lb}</span><span class="sbar"><b style="width:${Math.min(100, lo / max * 100)}%"></b>${d ? `<u class="${up ? '' : 'dn'}" style="left:${Math.min(100, lo / max * 100)}%;width:${Math.min(100, (hi - lo) / max * 100)}%"></u>` : ''}</span><span class="num ${up ? 'up' : d < 0 ? 'dn' : 'same'}">${y}${d ? ` (${up ? '+' : ''}${d})${why ? `<small> ${why}</small>` : ''}` : ''}</span></div>`;
+  }).join('');
+}
+function worstOf(loadout) { let w = null; for (const id of Object.values(loadout)) if (ITEMS[id].price > 0 && (!w || ITEMS[id].price > ITEMS[w].price)) w = id; return w; }
+const myJob = () => (career.jobTier > 0 ? career.job : null);
+function oppChip(id, fight) {
+  const c = CHARS[id], ov = fight.oppJob && fight.oppJob[id];
+  let job = ov ? ov[0] : c.job;
+  if (job === 'mimic') job = myJob();
+  const Jb = job && JOBS[job], bad = Jb && myJob() && Jb.beats === myJob();
+  return `<span class="chip${bad ? ' bad' : ''}"><i style="background:${c.css}"></i>${c.name}${Jb ? ` · ${Jb.icon} ${Jb.short}` : ''}${bad ? ' ▼' : ''}</span>`;
+}
 function renderHub() {
-  const c = career, cf = currentFights(c);
-  $('rankBadge').textContent = rankName(c.rank) + (c.champion ? ' 🏆' : '');
+  const c = career, cf = currentFights(c), offer = jobOffer(c), Jb = myJob() ? JOBS[c.job] : null;
+  $('rankBadge').textContent = (Jb ? `${Jb.icon} ${Jb.name} ${c.jobTier}차 · ` : '') + rankName(c.rank) + (c.champion ? ' 🏆' : '');
+  if (Jb) { $('rankBadge').style.background = Jb.css; $('rankBadge').style.color = '#2a1608'; } else { $('rankBadge').style.background = ''; $('rankBadge').style.color = ''; }
   $('rankBar').style.width = Math.min(100, c.points / cf.rank.unlock * 100) + '%';
   $('rankPts').textContent = `${c.points} / ${cf.rank.unlock}점`;
   $('goldTxt').textContent = c.gold;
-  const slots = $('slots'); slots.innerHTML = '';
-  for (const [slot, label] of [['staff', '지팡이'], ['hat', '모자'], ['robe', '로브'], ['gear', '마구']]) {
-    const row = document.createElement('div'); row.className = 'slot';
-    const owned = c.inventory.filter((id) => ITEMS[id] && ITEMS[id].slot === slot);
-    row.innerHTML = `<b>${label}</b><select id="slot_${slot}">${owned.map((id) => `<option value="${id}" ${c.loadout[slot] === id ? 'selected' : ''}>${ITEMS[id].name} (${itemDesc(id) || '기본'})</option>`).join('')}</select>`;
-    row.querySelector('select').onchange = (ev) => { equip(c, ev.target.value); save(); audio.play('click'); renderHub(); buildDisplay(); };
-    slots.appendChild(row);
-  }
+  $('hubStats').innerHTML = statBars(statsFor(c.loadout, null), statsFor(c.loadout, myJob()), '전직');
+  const sl = slotsFor(myJob(), c.jobTier), big = Jb ? Jb.spells[1] : null, tch = input.st.touch;
+  $('hubSpells').innerHTML = `<div><kbd>${tch ? '마법' : '우클릭'}</kbd> 마법<b>${SPELLS[sl.main].icon} ${SPELLS[sl.main].name}</b></div>`
+    + `<div class="${sl.big ? '' : 'lock'}"><kbd>${tch ? '큰 마법' : 'Q'}</kbd> 큰 마법<b>${sl.big ? SPELLS[sl.big].icon + ' ' + SPELLS[sl.big].name : '🔒 ' + (big ? SPELLS[big].name : '전직하면 열림')}</b>${sl.big ? '' : (Jb ? '랭크 결정전을 이기면 2차 전직' : '첫 승리 뒤 전직관에서')}</div>`;
+  const worst = worstOf(c.loadout);
+  $('gearRow').innerHTML = [['staff', '지팡이'], ['hat', '모자'], ['robe', '로브'], ['gear', '마구']].map(([k, lb]) => { const id = c.loadout[k]; return `<div class="${id === worst ? 'risk' : ''}">${lb}<b>${SHOP_ICON[id] || ''}</b>${ITEMS[id].name} · ${ITEMS[id].tier}</div>`; }).join('');
   const ts = tierSum(c.loadout);
-  $('tierNote').innerHTML = `장비 등급 합 <b>${ts}</b> → 포인트 <b>×${tierMul(ts)}</b>`;
+  $('hubRules').innerHTML = `<span>등급 합 ${ts} → 포인트 ×${tierMul(ts)}</span>${worst ? `<span class="warn">압수 1순위: ${ITEMS[worst].name}</span>` : ''}${Jb ? '<span class="ok">전직은 압수 안 됨</span>' : ''}`;
   const nx = cf.next;
-  $('nextTitle').textContent = nx.title;
-  $('nextOpps').innerHTML = nx.opp.map((id) => chipHTML(id)).join('');
-  $('nextPersona').innerHTML = [...new Set(nx.opp)].map((id) => `<b>${CHARS[id].name}</b>: ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
-  $('nextPts').textContent = `이기면 기본 ${nx.base}점 × ${tierMul(ts)} + 낙마시킬 때마다 30 + 되받아쳐 맞힐 때마다 50`;
+  $('nextTitle').textContent = offer ? (offer === 1 ? '🔮 전직할 때다' : '🔮 2차 전직') : nx.title;
+  $('nextOpps').innerHTML = offer ? '' : nx.opp.map((id) => oppChip(id, nx)).join('');
+  $('nextPersona').innerHTML = offer ? (offer === 1 ? '첫 시합을 이겼다! 전직관에서 네 원소 중 하나를 골라 시험을 치르면 그 원소의 마법을 받는다.' : '랭크 결정전을 이겼다! 전직관에서 큰 마법(Q)을 배운다.')
+    : [...new Set(nx.opp)].map((id) => `<b>${CHARS[id].name}</b>: ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
+  $('nextPts').textContent = offer ? '' : `이기면 기본 ${nx.base}점 × ${tierMul(ts)} + 낙마시킬 때마다 30 + 되받아쳐 맞힐 때마다 50`;
+  $('fightBtn').textContent = offer ? '🔮 전직관' : '⚔ 시합 시작';
+  $('fightBtn').classList.toggle('pulse', !!offer);
   $('bossTitle').textContent = cf.boss.title;
-  $('bossPersona').innerHTML = cf.boss.opp.map((id) => `<b>${CHARS[id].name}</b>: ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
-  $('bossBtn').disabled = !cf.bossOpen;
-  $('bossBtn').textContent = cf.bossOpen ? '👑 결정전 도전' : `🔒 ${cf.rank.unlock}점이면 열림`;
-  const shop = $('shop'); shop.innerHTML = '';
-  for (const id of SHOP) {
-    if (c.inventory.includes(id)) continue;
-    const it = ITEMS[id], row = document.createElement('div'); row.className = 'shopItem';
-    row.innerHTML = `<span><b>${it.name}</b> <span class="tier">등급 ${it.tier} · ${itemDesc(id)}</span></span><button ${c.gold < it.price ? 'disabled' : ''}>🪙${it.price}</button>`;
-    row.querySelector('button').onclick = () => { if (buy(c, id)) { equip(c, id); save(); audio.play('chime', [660, 990]); renderHub(); buildDisplay(); } };
-    shop.appendChild(row);
-  }
-  if (!shop.children.length) shop.innerHTML = '<div class="note">다 샀다!</div>';
+  $('bossPersona').innerHTML = cf.boss.opp.map((id) => `${oppChip(id, cf.boss)} ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
+  $('bossBtn').disabled = !cf.bossOpen || !!offer;
+  $('bossBtn').textContent = offer ? '🔮 전직 먼저' : cf.bossOpen ? '👑 결정전 도전' : `🔒 ${cf.rank.unlock}점이면 열림`;
 }
-function leaveFight() { input.exitLock(); input.st.enabled = false; input.showTouch(false); document.body.classList.remove('playing'); hud.show(false); hud.practice(null); paused = false; }
+// 상점: 지팡이 / 옷·마구 탭, 카드를 고르면 스탯 4개 비교와 하프소드 규칙 알약
+let shopTab = 'staff', shopSel = null;
+function openShop(tab = shopTab) { shopTab = tab; shopSel = null; show('shopScreen'); renderShop(); }
+function renderShop() {
+  const c = career, ids = shopTab === 'staff' ? ['stick', 'oak', 'iron', 'crystal', 'lance', 'mace'] : ['oldcone', 'felt', 'brass', 'rags', 'quilted', 'nogear', 'saddle', 'spurs'];
+  $('shopGold').textContent = c.gold;
+  $('tabStaff').classList.toggle('on', shopTab === 'staff'); $('tabWear').classList.toggle('on', shopTab !== 'staff');
+  $('shopNote').textContent = shopTab === 'staff' ? '지팡이를 바꾸면 휘두르기와 마법 위력이 바뀐다' : '옷과 마구를 바꾸면 버티기와 말 속도가 바뀐다';
+  const sel = shopSel || ids.find((id) => c.loadout[ITEMS[id].slot] === id) || ids[0];
+  $('shopCards').innerHTML = ids.map((id) => {
+    const it = ITEMS[id], own = c.inventory.includes(id), on = c.loadout[it.slot] === id;
+    return `<div class="icard${id === sel ? ' sel' : ''}" data-id="${id}"><span class="tr">등급${it.tier}</span><div class="ic">${SHOP_ICON[id] || '❔'}</div><b>${it.name}</b>${on ? '<span class="eq">들고 있음</span>' : own ? '<span class="own">가짐</span>' : `<div class="pr">🪙 ${it.price}</div>`}</div>`;
+  }).join('');
+  for (const el of $('shopCards').querySelectorAll('.icard')) el.onclick = () => { shopSel = el.dataset.id; audio.play('click'); renderShop(); };
+  const it = ITEMS[sel], next = { ...c.loadout, [it.slot]: sel };
+  const a = statsFor(c.loadout, myJob()), b = statsFor(next, myJob()), t0 = tierSum(c.loadout), t1 = tierSum(next);
+  const own = c.inventory.includes(sel), on = c.loadout[it.slot] === sel, worst = it.price > 0 && worstOf(next) === sel;
+  const Jb = myJob() ? JOBS[c.job] : null;
+  $('shopDetail').innerHTML = `<h3>${it.name}<span class="tag">등급 ${it.tier}</span>${Jb ? `<span class="tag" style="background:${Jb.css}">${Jb.icon} ${Jb.bonusTxt} 포함</span>` : ''}</h3><div class="note">${itemDesc(sel) || '기본 장비'}</div>${statBars(a, b)}
+    <div class="rule"><span>장비 등급 합 ${t0} → ${t1}</span><span>이기면 포인트 ×${tierMul(t0)} → <b class="${tierMul(t1) < tierMul(t0) ? 'num dn' : ''}">×${tierMul(t1)}</b></span>${worst ? '<span class="warn">기절해서 지면 압수 1순위가 된다</span>' : ''}</div>
+    <div class="btnRow"><button id="shopAct" class="primary" ${on || (!own && c.gold < it.price) ? 'disabled' : ''}>${on ? '들고 있음' : own ? '바로 들기' : `🪙 ${it.price} 사고 바로 들기`}</button></div>`;
+  $('shopAct').onclick = () => { if (!own && !buy(c, sel)) return; equip(c, sel); save(); audio.play('chime', [660, 990]); buildDisplay(); renderShop(); };
+}
+// 전직관: 1차는 네 원소 카드, 2차는 내 원소. 고르면 시험 설명, 1차는 시험 전에 질문 하나
+let trialDef = null, trialAttempt = 0, jobPick = null, quizDone = false;
+function goJobs() {
+  const tier = jobOffer(career);
+  if (!tier) { goHub(); return; }
+  stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('jobs');
+  if (!display) buildDisplay();
+  jobPick = career.job || jobPick;
+  $('jobsQuiz').classList.add('hidden');
+  renderJobs(tier);
+}
+function renderJobs(tier) {
+  $('jobsBadge').textContent = tier === 1 ? '견습 졸업' : '2차 전직';
+  $('jobsNote').textContent = tier === 1 ? '첫 시합을 이겼다! 네 원소 중 하나를 고른다' : '랭크 결정전을 이겼다! 큰 마법을 배운다';
+  $('jobsNpc').innerHTML = '<b>전직관 노마법사</b>' + (tier === 1 ? '마력은 결국 말의 속도다. 불은 겁주고, 물은 당기고, 바람은 밀고, 땅은 막는다. 어느 쪽으로 쓸 테냐?' : `이제 두 번째 마법이다. 큰 마법은 ${input.st.touch ? '큰 마법 버튼' : 'Q'}다.`);
+  const list = tier === 1 ? JOB_ORDER : [career.job];
+  $('jobCards').innerHTML = list.map((k) => {
+    const Jk = JOBS[k], [s1, s2] = Jk.spells, strong = JOB_ORDER.find((x) => JOBS[x].beats === k), tr = trialFor(k, tier);
+    return `<div class="job${k === jobPick ? ' sel' : ''}" data-job="${k}"><div class="jh"><div class="ic" style="background:${Jk.css}">${Jk.icon}</div><div><b>${Jk.name}</b><span class="sp">${Jk.role}</span></div></div>
+      <div class="sk"><span class="t">1차</span>${SPELLS[s1].icon} ${SPELLS[s1].name}</div><div class="sk${tier === 1 ? ' lock' : ''}"><span class="t">2차</span>${SPELLS[s2].icon} ${SPELLS[s2].name}</div>
+      <div class="ln"><span class="k">📏 거리</span>${Jk.range}</div><div class="ln"><span class="k">전직 보너스</span><span class="up">${Jk.bonusTxt}</span></div>
+      <div class="ln"><span class="w">▲ ${JOBS[Jk.beats].short}에 강함</span><br><span class="l">▼ ${JOBS[strong].short}에 약함</span></div>
+      <div class="ln"><span class="k">📜 시험</span>「${tr.title}」</div></div>`;
+  }).join('');
+  if (tier === 2) jobPick = career.job;
+  for (const el of $('jobCards').querySelectorAll('.job')) el.onclick = () => { if (tier !== 1) return; jobPick = el.dataset.job; audio.play('click'); renderJobs(tier); };
+  const tr = jobPick ? trialFor(jobPick, tier) : null;
+  if (!tr) { $('jobTrial').innerHTML = '<div class="note">카드를 눌러 원소를 고른다</div>'; return; }
+  const tries = career.trials[tr.id] || 0, Jk = JOBS[jobPick], spell = SPELLS[Jk.spells[tier - 1]];
+  $('jobTrial').innerHTML = `<h3>${Jk.icon} ${Jk.name} ${tier}차 시험: ${tr.title}<span class="tag">${tr.time}초</span></h3><div>${tr.goal}</div>
+    ${tries >= 2 ? `<div class="hint">💡 ${tr.hint} · 이번엔 조건을 낮춘다</div>` : ''}
+    <div class="rule"><span class="ok">통과하면 ${tier === 1 ? Jk.name + ' + ' : ''}${spell.icon} ${spell.name}${tier === 1 ? ' + ' + Jk.bonusTxt : ''}</span><span>실패해도 잃는 것 없이 다시</span>${tier === 1 ? '<span class="warn">한 판에 한 원소만</span>' : ''}</div>
+    <div class="btnRow"><button id="trialGo" class="primary">📜 시험 보러 가기</button></div>`;
+  $('trialGo').onclick = () => { audio.play('click'); if (tier === 1 && !quizDone) { showQuiz(tr); return; } beginTrial(tr); };
+}
+function showQuiz(tr) {
+  const q = $('jobsQuiz'); q.classList.remove('hidden');
+  q.innerHTML = '<b>전직관</b>시험 전에 하나만 묻자. 마력은 어디서 나오지?<div class="btnRow">' + ['지팡이', '말의 속도', '모자'].map((a) => `<button data-a="${a}">${a}</button>`).join('') + '</div>';
+  for (const b of q.querySelectorAll('button')) b.onclick = () => {
+    const ok = b.dataset.a === '말의 속도'; quizDone = true; audio.play(ok ? 'chime' : 'click', ok ? [660, 990] : undefined);
+    q.innerHTML = `<b>전직관</b>${ok ? '맞다.' : '아니다.'} 말이 빠를수록 마력이 크고, 마법을 쓰면 그만큼 느려진다. 자, 가 봐라.<div class="btnRow"><button id="quizGo" class="primary">📜 시험 시작</button></div>`;
+    $('quizGo').onclick = () => { q.classList.add('hidden'); beginTrial(tr); };
+  };
+}
+function beginTrial(tr) {
+  if (tr.tier === 1 && !chooseJob(career, tr.job)) return;
+  save(); trialDef = tr; trialAttempt = career.trials[tr.id] || 0;
+  beginPlay('trial');
+}
+function leaveFight() { input.exitLock(); input.st.enabled = false; input.showTouch(false); document.body.classList.remove('playing'); hud.show(false); hud.practice(null); hud.trial(null); paused = false; }
 function goTitle() { stopMatch(); leaveFight(); show('title'); startMatch(null, 'attract'); }
 function goHub() {
   stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('hub');
@@ -607,13 +716,14 @@ function goPre(fight) {
   fightDef = fight; mode = 'pre'; kind = 'gauntlet'; show('pre');
   $('preMode').textContent = fight.mode === 'duel' ? '1대1 결투' : `${fight.opp.length + 1}인 난투`;
   $('preTitle').textContent = fight.title;
-  $('preOpps').innerHTML = fight.opp.map((id) => chipHTML(id)).join('');
+  $('preOpps').innerHTML = fight.opp.map((id) => oppChip(id, fight)).join('');
   $('preLine').innerHTML = `<b>${fight.line[0]}</b>${fight.line[1]}`;
   const tips = [];
   if (fight.tutorial) tips.push('첫 시합은 안내가 나와요. 동작은 연습장에서 먼저 해 봐도 좋아요.');
-  if (fight.opp.includes('mukjik') || fight.opp.includes('boss1')) tips.push('묵직이는 정면으로 찌르며 온다. 옆으로 비껴 스치며 머리를 쳐라.');
-  if (fight.opp.includes('beongae')) tips.push('번개는 작은 마법을 자주 쏘고 지팡이를 던지기도 한다.');
-  if (fight.opp.includes('gihoe')) tips.push('기회주의자는 옆에 붙으면 잡아서 끌어내린다. 붙지 마라.');
+  if (fight.opp.includes('mukjik')) tips.push('묵직이는 💨 바람 마법사다. 정면으로 오다 붙으면 돌풍으로 날린다. 옆으로 비껴 스쳐라.');
+  if (fight.opp.includes('boss1')) tips.push('돌쇠는 🪨 땅 마법사다. 정면으로 달려들면 흙벽, 질주해 오면 땅가르기. 옆으로 돌아라.');
+  if (fight.opp.includes('beongae')) tips.push('번개는 🔥 불 마법사다. 화염구에 말이 놀라고, 쫓아가면 불길이 깔린다.');
+  if (fight.opp.includes('gihoe')) tips.push('기회주의자는 💧 물 마법사다. 나보다 빠를 때 물채찍으로 끌어당긴다. 더 빨리 달려라.');
   if (fight.final) tips.push('라이벌은 네 습관을 따라 한다. 평소와 다르게 싸워 봐.');
   tips.push('기절하면 장비 하나를 압수당한다. 위험하면 ' + (input.st.touch ? '⏸ 메뉴에서 항복.' : '<kbd>G</kbd>를 길게 눌러 항복.'));
   $('preTip').innerHTML = tips.join('<br>');
@@ -629,6 +739,7 @@ function startMatch(fight, how = 'fight', custom = null) {
   else if (how === 'practice') opts = { seed: 7, mode: 'practice', countdown: 1, roster: [{ char: 'maji', isPlayer: true, loadout: { ...career.loadout } }, { char: 'dummy', persona: 'still' }, { char: 'dummy', persona: 'still' }, { char: 'beongae', persona: 'still' }],
     looseWeapons: [{ item: 'oak', x: -4, z: -18 }, { item: 'iron', x: -5.5, z: -18 }, { item: 'lance', x: -7, z: -18 }, { item: 'mace', x: -8.5, z: -18 }, { item: 'crystal', x: -10, z: -18 }] };
   else if (how === 'free') opts = { seed: 1 + Math.floor(Math.random() * 9999), mode: custom.opp.length === 1 ? 'duel' : 'brawl', countdown: 3, roster: [{ char: 'maji', isPlayer: true, loadout: custom.loadout }, ...custom.opp.map((c) => ({ char: c }))], rivalMimic: rivalMimic(career) };
+  else if (how === 'trial') opts = trialMatchOpts(trialDef, career, trialAttempt);
   else opts = { seed: fight.seed + career.log.length * 17, mode: fight.mode, roster: buildRoster(career, fight), countdown: 3, rivalMimic: rivalMimic(career) };
   match = createMatch(R, opts);
   vis = buildVisuals(scene, match);
@@ -679,12 +790,33 @@ function beginPlay(how, custom) {
   view = input.st.touch && vp.h > vp.w ? 'tp' : 'fp';   // 세로 화면은 좁아서 1인칭이면 지팡이가 화면 밖 → 3인칭으로 시작
   hud.legend(!input.st.touch);
   hud.practice(how === 'practice' ? practiceItems() : null);
+  hud.trial(how === 'trial' ? { tag: `${JOBS[trialDef.job].name} ${trialDef.tier}차 시험`, title: trialDef.title, goal: trialDef.goal } : null);
+  if (how === 'trial') hud.trialTip((trialAttempt >= 2 ? '💡 ' : '<b>전직관:</b> ') + trialDef.hint);
   if (how === 'practice') hud.toast('연습장: 가만히 있는 허수아비와 오른쪽 앞 무기 더미. 왼쪽 목록을 하나씩 해 보세요', 6);
   else if (vp.rot) hud.toast(TILT, 3.5);
 }
 function finishFight() {
   leaveFight();
   const r = match.result;
+  if (kind === 'trial') {   // 전직 시험 결과
+    const passed = r.reason === 'pass';
+    if (passed) passTrial(career, trialDef); else failTrial(career, trialDef);
+    save();
+    show('result');
+    const Jk = JOBS[trialDef.job], spell = SPELLS[Jk.spells[trialDef.tier - 1]];
+    $('resT').textContent = passed ? '전직!' : '다시 해 보자';
+    $('resT').className = 'bigT ' + (passed ? 'win' : 'lose');
+    $('resSub').textContent = `${Jk.name} ${trialDef.tier}차 시험 「${trialDef.title}」 · ${Math.floor(r.t)}초`;
+    statsHTML(r); testLine(r);
+    const tries = career.trials[trialDef.id] || 0;
+    $('resRewards').innerHTML = passed ? `${Jk.icon} <b>${Jk.name}</b> ${trialDef.tier}차 · ${spell.icon} <b>${spell.name}</b>을 배웠다${trialDef.tier === 1 ? ` · ${Jk.bonusTxt}` : ' · 큰 마법은 ' + (input.st.touch ? '큰 마법 버튼' : 'Q')}`
+      : `잃은 것은 없다.${tries >= 2 ? ' 다음엔 힌트를 주고 조건을 낮춘다.' : ''}`;
+    $('lootBox').classList.add('hidden');
+    $('resRetry').textContent = passed ? '마구간으로' : '다시 도전'; $('resHub').textContent = passed ? '마구간으로' : '전직관으로';
+    lastResult = { r, rewards: { won: passed }, trial: true, passed };
+    audio.play(passed ? 'fanfare' : 'sad');
+    return;
+  }
   if (kind === 'free') {
     show('result');
     $('resT').textContent = r.playerWon ? '승리!' : r.reason === 'surrender' ? '항복' : '패배';
@@ -740,8 +872,9 @@ function testLine(r) {
   const res = r.playerWon ? '승' : r.reason === 'surrender' ? '항복' : '패';
   const ms = t.n ? (t.sum / t.n * 1000).toFixed(1) : '-', slow = t.n ? Math.round(t.slow / t.n * 100) : 0;
   const d = new Date(), day = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const line = `[마상 시험 ${VERSION}] ${day} · ${input.st.touch ? '폰' : 'PC'}·${S.adv ? '고급' : '쉬운'} 조작·${view === 'fp' ? '1인칭' : '3인칭'} · vs ${opp} · ${res} ${Math.floor(r.t)}초`
-    + ` | 마법 ${t.casts}(질주 중 ${t.fast}) · 타격 ${s.hits} · 맞음 ${t.taken} · 낙마시킴 ${s.unhorsed} · 낙마당함 ${t.fell} · 기절시킴 ${s.kos} · 되받아침 ${s.deflectHits}`
+  const jb = player && player.job ? `${JOBS[player.job].short}${player.jobTier}` : '견습', sp = Object.entries(s.spells || {}).map(([k, v]) => `${SPELLS[k] ? SPELLS[k].name : k}${v}`).join(' ');
+  const line = `[마상 시험 ${VERSION}] ${day} · ${input.st.touch ? '폰' : 'PC'}·${S.adv ? '고급' : '쉬운'} 조작·${view === 'fp' ? '1인칭' : '3인칭'} · ${jb}${kind === 'trial' && trialDef ? ' 시험 ' + trialDef.id : ''} · vs ${opp} · ${res} ${Math.floor(r.t)}초`
+    + ` | 마법 ${t.casts}(질주 중 ${t.fast})${sp ? ' [' + sp + ']' : ''} · 타격 ${s.hits} · 맞음 ${t.taken} · 낙마시킴 ${s.unhorsed} · 낙마당함 ${t.fell} · 기절시킴 ${s.kos} · 되받아침 ${s.deflectHits}`
     + ` | 프레임 평균 ${ms}ms, 느린 프레임 ${slow}%`;
   $('resTest').textContent = line; $('resCopy').textContent = '📋 시험 기록 복사';
 }
@@ -762,7 +895,7 @@ let paused = false, settingsFrom = null;
 function pause(on) {
   if (mode !== 'fight') return;
   paused = on;
-  if (on) { show('pause'); input.exitLock(); $('giveBtn').textContent = kind === 'practice' ? '연습 끝내기' : '🏳 항복 (잃는 것 없음)'; }
+  if (on) { show('pause'); input.exitLock(); $('giveBtn').textContent = kind === 'practice' ? '연습 끝내기' : kind === 'trial' ? '🏳 시험 그만두기 (잃는 것 없음)' : '🏳 항복 (잃는 것 없음)'; }
   else { show(null); input.requestLock(); }
 }
 input.st.onLockChange = (locked) => { if (!locked && mode === 'fight' && !paused && endTimer < 0 && !input.st.touch && !input.st.lockFailed && !replay) pause(true); };
@@ -804,7 +937,12 @@ $('practiceBtn').onclick = () => { audio.play('click'); beginPlay('practice'); }
 $('startBtn').onclick = () => { audio.start(); audio.play('click'); goHub(); };
 if (hasSave && career.log.length) $('startBtn').textContent = '🐴 건틀릿 (이어서)';
 $('titleBtn').onclick = () => goTitle();
-$('fightBtn').onclick = () => { audio.play('click'); goPre(currentFights(career).next); };
+$('fightBtn').onclick = () => { audio.play('click'); if (jobOffer(career)) goJobs(); else goPre(currentFights(career).next); };
+$('shopBtn').onclick = () => { audio.play('click'); openShop('staff'); };
+$('tabStaff').onclick = () => { shopTab = 'staff'; shopSel = null; audio.play('click'); renderShop(); };
+$('tabWear').onclick = () => { shopTab = 'wear'; shopSel = null; audio.play('click'); renderShop(); };
+$('shopBack').onclick = () => { audio.play('click'); goHub(); };
+$('jobsBack').onclick = () => { audio.play('click'); goHub(); };
 $('bossBtn').onclick = () => { audio.play('click'); goPre(currentFights(career).boss); };
 $('resetBtn').onclick = () => { if (confirmReset()) { career = newCareer(); save(); renderHub(); buildDisplay(); } };
 let resetArm = 0;
@@ -812,8 +950,9 @@ function confirmReset() { const now = performance.now(); if (now - resetArm < 25
 $('muteBtn').onclick = () => { const mu = audio.toggleMute(); $('muteBtn').textContent = mu ? '🔇 소리 끔' : '🔊 소리'; };
 $('goBtn').onclick = () => { audio.play('click'); beginPlay('fight'); };
 $('backBtn').onclick = () => goHub();
-$('resHub').onclick = () => { if (lastResult && lastResult.free) { goTitle(); return; } if (lastResult && lastResult.rewards.ending) endingScreen(); else goHub(); };
+$('resHub').onclick = () => { if (lastResult && lastResult.trial) { if (lastResult.passed) goHub(); else goJobs(); return; } if (lastResult && lastResult.free) { goTitle(); return; } if (lastResult && lastResult.rewards.ending) endingScreen(); else goHub(); };
 $('resRetry').onclick = () => {
+  if (lastResult && lastResult.trial) { if (lastResult.passed) goHub(); else { trialAttempt = career.trials[trialDef.id] || 0; beginPlay('trial'); } return; }
   if (lastResult && lastResult.free) { beginPlay('free', freeSpec); return; }
   if (lastResult && lastResult.rewards.ending) { endingScreen(); return; }
   if (lastResult.rewards.rankUp) goHub(); else goPre(lastResult.rewards.won ? currentFights(career).next : lastResult.fight);
@@ -862,10 +1001,18 @@ function renderSpells(A, B, alpha, dt) {
   for (const sb of B.spells) {
     seen.add(sb.id);
     const sa = amap.get(sb.id) || sb;
-    const c = new THREE.Color(match.fighters[sb.owner].ch.color).lerp(new THREE.Color(0xffffff), 0.35).getHex();
+    const c = sb.kind === 'fireball' ? 0xff7a30 : new THREE.Color(match.fighters[sb.owner].ch.color).lerp(new THREE.Color(0xffffff), 0.35).getHex();
     fx.spellMove(sb.id, { x: sa.pos.x + (sb.pos.x - sa.pos.x) * alpha, y: sa.pos.y + (sb.pos.y - sa.pos.y) * alpha, z: sa.pos.z + (sb.pos.z - sa.pos.z) * alpha }, dt, c, sb.r);
   }
   for (const id of fx.spellIds()) if (!seen.has(id)) fx.spellEnd(id);
+}
+// 마법 보기용 위치: 지팡이 끝(물채찍 시작) 또는 몸
+function fighterPosOf(F) {
+  return (i, tip) => {
+    const fr = F.fighters[i];
+    if (tip && fr.weapon >= 0 && vis && vis.weapons[fr.weapon]) { const st = vis.weapons[fr.weapon]; return st.group.localToWorld(V(0, st.len / 2, 0)); }
+    return V(fr.p.x, fr.p.y + 0.6, fr.p.z);
+  };
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -887,6 +1034,7 @@ function frame(now) {
           const A = replay.list[k], B = replay.list[k + 1], a = replay.pos - k;
           renderFrames(vis, A, B, a, { dt: dt * 0.35, t, player: player ? player.i : -1, view, replay: true });
           renderSpells(A, B, a, dt * 0.35);
+          magicView.update(B, t, fighterPosOf(B));
           arena.setFence(B.fenceR);
           const fp = B.fighters[replay.focus].p;
           replay.ang += dt * 0.5;
@@ -915,6 +1063,7 @@ function frame(now) {
     const alpha = acc / TICK;
     renderFrames(vis, prevF, curF, alpha, { dt: dt * ts, rdt: dt, t, player: player ? player.i : -1, view, hooves });
     renderSpells(prevF, curF, alpha, dt * ts);
+    magicView.update(curF, t, fighterPosOf(curF));
     arena.setFence(prevF.fenceR + (curF.fenceR - prevF.fenceR) * alpha);
     // 카운트다운
     if (match.t < 0.2 && mode === 'fight') {
@@ -939,6 +1088,7 @@ function frame(now) {
       if (player) {
         hud.update(match, player, camera, dt, endTimer >= 0 ? 'cine' : view);
         hud.target(!S.adv && assist && endTimer < 0 ? assist.ui : null, camera);
+        if (kind === 'trial' && trialDef && match.opts.judge) hud.trialProgress(trialDef.time - Math.max(0, match.t), match.opts.judge.st.progress, match.opts.judge.st.need);
         if (!S.adv && assist) simpleButtons(assist.ui);
         audio.chargeHum(player.charging ? player.charge / CFG.spell.fMax : 0);
         breathT -= dt; if (player.stam < 20 && breathT <= 0) { breathT = 0.9; audio.play('breath', 1 - player.stam / 25); }
@@ -979,7 +1129,7 @@ window.__mw = {
   koMe() { knockOut(match, player, 1); },
   replayNow(focus = 1) { startReplay(focus, match.tick); },
   input: (patch) => Object.assign(ctl, patch),
-  hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient,
+  hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient, magicView, scene,
 };
 
 // 시작: 타이틀 뒤에서 AI 난투를 보여 준다

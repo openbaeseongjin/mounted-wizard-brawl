@@ -23,7 +23,12 @@ export function makeFrame(m) {
     })),
     weapons: m.weapons.map((w) => ({ p: cp(w.body.translation()), q: cq(w.body.rotation()), holder: w.holder, on: w.isFist ? w.holder >= 0 : true })),
     props: m.props.map((p) => ({ p: cp(p.body.translation()), q: cq(p.body.rotation()) })),
-    spells: m.spells.map((s) => ({ id: s.id, pos: cp(s.pos), vel: cp(s.vel), r: s.r, owner: s.owner })),
+    spells: m.spells.map((s) => ({ id: s.id, pos: cp(s.pos), vel: cp(s.vel), r: s.r, owner: s.owner, kind: s.kind || 'orb' })),
+    zones: m.zones.map((z) => ({ id: z.id, kind: z.kind, a: { x: z.a.x, z: z.a.z }, b: { x: z.b.x, z: z.b.z }, r: z.r, t: z.t, life: z.life })),
+    walls: m.walls.map((w) => ({ id: w.id, p: cp(w.body.translation()), yaw: w.yaw, w: w.w, h: w.h })),
+    tornados: m.tornados.map((t) => ({ id: t.id, x: t.pos.x, z: t.pos.z, fire: t.fire, t: t.t })),
+    fissures: m.fissures.map((s) => ({ id: s.id, o: { x: s.o.x, z: s.o.z }, dir: { x: s.dir.x, z: s.dir.z }, front: s.front, len: s.len })),
+    whips: m.fighters.map((f) => (f.whip ? f.whip.j : -1)),
   };
 }
 const _pa = V(), _pb = V(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
@@ -42,7 +47,7 @@ export function buildVisuals(scene, m) {
     vis.horses.push({ hv, gaitI: undefined, dustT: 0, P: V(), Q: new THREE.Quaternion() });
   }
   for (const f of m.fighters) {
-    const w = buildWizard(f.char, f.loadout); g.add(w.root);
+    const w = buildWizard(f.char, f.loadout, f.job); g.add(w.root);
     const limbs = buildLimbs(f.ch); g.add(limbs.group);
     const stars = new THREE.Group(); for (let k = 0; k < 3; k++) stars.add(glowSprite(0xffe14d, 0.22)); g.add(stars);
     vis.fighters.push({ w, limbs, stars, hatOn: true, walk: 0, hs: { x: 0, z: 0, vx: 0, vz: 0 }, bumps: 0, P: V(), Q: new THREE.Quaternion(), blend: 0, lastLimbs: null });

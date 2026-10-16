@@ -5,7 +5,7 @@
 //           같은 버튼이 상황에 따라 쳐내기(날아오는 마법) · 줍기 · 타기 · 찌르기(마상창) · 주먹으로 바뀐다
 //  피하기   말 위 = 숙이기(누르는 동안), 걸을 때 = 발차기
 //  스틱     말은 저절로 달린다(가만두면 구보). 끝까지 밀면 질주, 당기면 감속
-import { CFG } from './config.js';
+import { CFG, SPELLS } from './config.js';
 import { add, sub, scale, len, dot, clamp, wrapAngle, rightOf, hdist } from './rng.js';
 import { idleInput, steerToward, shoulderWorld, avoidFence } from './fighter.js';
 
@@ -31,9 +31,9 @@ export const ASSIST = {
 export function createAssist(m, i) {
   const a = {
     target: -1, swingT: -1, side: 1, hy: 0, dur: 0.18, wind: 0.12, arming: false, thrustT: 0, couch: false,
-    prev: { cast: false, swing: false, dodge: false }, flip: false,
+    prev: { cast: false, swing: false, dodge: false, big: false }, flip: false, aimT: { main: 0, big: 0 },
     look: null,   // 버튼을 누르는 동안 보기를 이쪽으로 돌린다 [몸/말 기준 요, 피치]
-    ui: { target: -1, mode: 'idle', prog: 0, gold: false, swingLabel: '휘두르기', castOk: true, dodgeLabel: '숙이기', aim: null },
+    ui: { target: -1, mode: 'idle', prog: 0, gold: false, swingLabel: '휘두르기', castOk: true, dodgeLabel: '숙이기', aim: null, slot: 'main', castLabel: '마력탄', bigLabel: '', bigOk: false },
   };
   const pos = (g) => g.rider.body.translation();
   const vel = (g) => (g.horse >= 0 ? m.horses[g.horse].body.linvel() : g.rider.body.linvel());
@@ -142,6 +142,23 @@ export function createAssist(m, i) {
     return best ? { h: best, d: bd } : null;
   }
   const foeWithin = (f, r) => m.fighters.some((g) => g !== f && !g.out && hdist(pos(f), pos(g)) < r);
+  // 원소 마법의 금색(지금 떼면 좋다) 조건: 설계 9장
+  function goldFor(id, f, g, fr, P) {
+    if (!g) return false;
+    const me = pos(f), gp = pos(g), d = hdist(me, gp), hd = f.horse >= 0 ? m.horses[f.horse].heading : f.aimYaw;
+    const ahead = Math.abs(wrapAngle(Math.atan2(gp.x - me.x, gp.z - me.z) - hd)), gv = vel(g), mv = vel(f);
+    const closing = -((gv.x - mv.x) * (gp.x - me.x) + (gv.z - mv.z) * (gp.z - me.z)) / Math.max(1, d), S = SPELLS[id];
+    switch (id) {
+      case 'orb': case 'fireball': return fr >= ASSIST.castGold && d < ASSIST.castRange && (!P || aimErr(f, lookAt(f, P)) < ASSIST.aimTol * 2);
+      case 'gust': return fr >= S.minF && d < 3.5;
+      case 'wall': case 'ice': return fr >= S.minF && ahead < 0.35 && d > 8 && d < 17 && closing > 6;
+      case 'tornado': return fr >= S.minF && m.fighters.filter((x) => x !== f && !x.out && hdist(me, pos(x)) < 15).length >= 2;
+      case 'fissure': return fr >= S.minF && ahead < 0.3 && d > 6 && d < 16 && Math.hypot(gv.x, gv.z) > 8;
+      case 'whip': return d < S.range && Math.hypot(mv.x, mv.z) > Math.hypot(gv.x, gv.z) + 1;
+      case 'firetrail': return ahead > Math.PI - 0.9 && d < 15;
+    }
+    return false;
+  }
 
   // intent: { move:[x,y], look:[요,피치] (손으로 돌린 보기), cast, swing, dodge } (누르고 있는지)
   function step(intent, dt) {
@@ -158,10 +175,10 @@ export function createAssist(m, i) {
       inp.move = [mx, my < -0.2 ? my : Math.max(ASSIST.cruise, my)];
       inp.gallop = my >= ASSIST.gallopAt && !h.winded;
     } else { inp.move = [mx, my]; inp.gallop = Math.hypot(mx, my) >= ASSIST.gallopAt; }
-    if (!active) { a.swingT = -1; a.arming = false; a.thrustT = 0; a.couch = false; a.prev = { cast: intent.cast, swing: intent.swing, dodge: intent.dodge }; ui.target = -1; return inp; }
+    if (!active) { a.swingT = -1; a.arming = false; a.thrustT = 0; a.couch = false; a.prev = { cast: intent.cast, swing: intent.swing, dodge: intent.dodge, big: intent.big }; ui.target = -1; return inp; }
 
     const viewYaw = mounted ? m.horses[f.horse].heading + intent.look[0] : intent.look[0];
-    const busy = intent.cast || intent.swing || a.swingT >= 0 || a.thrustT > 0;
+    const busy = intent.cast || intent.big || intent.swing || a.swingT >= 0 || a.thrustT > 0;
     a.target = pickTarget(f, viewYaw, busy);
     const g = a.target >= 0 ? m.fighters[a.target] : null;
     ui.target = a.target;
@@ -250,19 +267,25 @@ export function createAssist(m, i) {
     }
     else if (!a.arming && !a.couch && a.thrustT <= 0) a.ctxHeld = null;
 
-    // ----- 마법 버튼 ----- (뗀 직후 몇 틱도 계속 겨눈다: 쏘는 건 뗀 다음 틱이다)
-    if (released('cast')) a.castAimT = 0.1;
-    a.castAimT = Math.max(0, (a.castAimT || 0) - dt);
-    if (armed && (intent.cast || a.castAimT > 0) && !inp.swing && !inp.thrust) {
-      inp.charge = intent.cast;
-      const P = g ? aimPoint(f, g, 1 / CFG.spell.speed) : null;
+    // ----- 마법 버튼(우클릭) · 큰 마법(Q) ----- (뗀 직후 몇 틱도 계속 겨눈다: 쏘는 건 뗀 다음 틱이다)
+    ui.castLabel = SPELLS[f.slots.main].name; ui.bigLabel = f.slots.big ? SPELLS[f.slots.big].name : ''; ui.bigOk = !!f.slots.big && armed;
+    for (const [slot, key, ik] of [['main', 'charge', 'cast'], ['big', 'big', 'big']]) {
+      const id = f.slots[slot];
+      if (!id) continue;
+      if (released(ik)) a.aimT[slot] = 0.1;
+      a.aimT[slot] = Math.max(0, a.aimT[slot] - dt);
+      if (!(armed && (intent[ik] || a.aimT[slot] > 0) && !inp.swing && !inp.thrust)) continue;
+      inp[key] = !!intent[ik];
+      const S = SPELLS[id], lead = id === 'orb' ? 1 / CFG.spell.speed : id === 'fireball' ? 1 / (CFG.spell.speed * SPELLS.fireball.speedMul) : 0;
+      const P = g ? aimPoint(f, g, lead) : null;
       if (P) { a.look = lookAt(f, P); inp.look = a.look.slice(); }
-      const fr = f.charging ? f.charge : 0, d = g ? hdist(pos(f), pos(g)) : 99;
-      ui.mode = 'charge'; ui.prog = clamp(fr / ASSIST.castGold, 0, 1);
-      ui.gold = !!g && fr >= ASSIST.castGold && d < ASSIST.castRange && (!P || aimErr(f, lookAt(f, P)) < ASSIST.aimTol * 2);
+      const fr = f.charging && f.chargeSlot === slot ? f.charge : 0;
+      ui.mode = 'charge'; ui.slot = slot;
+      ui.prog = S.press === 'hold' ? (f.holdOn[id] ? 1 : 0) : clamp(fr / Math.max(S.minF || 0, ASSIST.castGold), 0, 1);
+      ui.gold = goldFor(id, f, g, fr, P);
     }
     if (g) ui.aim = aimPoint(f, g, 0);
-    a.prev = { cast: intent.cast, swing: intent.swing, dodge: intent.dodge };
+    a.prev = { cast: intent.cast, swing: intent.swing, dodge: intent.dodge, big: intent.big };
     return inp;
   }
   return { step, state: a, ui: a.ui };
