@@ -682,7 +682,7 @@ function renderJobs(tier) {
       <div class="sk"><span class="t">1차</span>${SPELLS[s1].icon} ${SPELLS[s1].name}</div><div class="sk${tier === 1 ? ' lock' : ''}"><span class="t">2차</span>${SPELLS[s2].icon} ${SPELLS[s2].name}</div>
       <div class="ln"><span class="k">📏 거리</span>${Jk.range}</div><div class="ln"><span class="k">전직 보너스</span><span class="up">${Jk.bonusTxt}</span></div>
       <div class="ln"><span class="w">▲ ${JOBS[Jk.beats].short}에 강함</span><br><span class="l">▼ ${JOBS[strong].short}에 약함</span></div>
-      <div class="ln"><span class="k">📜 시험</span>「${tr.title}」</div></div>`;
+      <div class="ln"><span class="k">📜 시험</span>「${tr.title}」</div>${tier === 1 ? `<div class="pick">${k === jobPick ? '✓ 고름' : '눌러서 고르기'}</div>` : ''}</div>`;
   }).join('');
   if (tier === 2) jobPick = career.job;
   for (const el of $('jobCards').querySelectorAll('.job')) el.onclick = () => { if (tier !== 1) return; jobPick = el.dataset.job; audio.play('click'); renderJobs(tier); };
@@ -691,7 +691,7 @@ function renderJobs(tier) {
   const tries = career.trials[tr.id] || 0, Jk = JOBS[jobPick], spell = SPELLS[Jk.spells[tier - 1]];
   $('jobTrial').innerHTML = `<h3>${Jk.icon} ${Jk.name} ${tier}차 시험: ${tr.title}<span class="tag">${tr.time}초</span></h3><div>${tr.goal}</div>
     ${tries >= 2 ? `<div class="hint">💡 ${tr.hint} · 이번엔 조건을 낮춘다</div>` : ''}
-    <div class="rule"><span class="ok">통과하면 ${tier === 1 ? Jk.name + ' + ' : ''}${spell.icon} ${spell.name}${tier === 1 ? ' + ' + Jk.bonusTxt : ''}</span><span>실패해도 잃는 것 없이 다시</span>${tier === 1 ? '<span class="warn">한 판에 한 원소만</span>' : ''}</div>
+    <div class="rule"><span class="ok">통과하면 ${tier === 1 ? Jk.name + ' + ' : ''}${spell.icon} ${spell.name}${tier === 1 ? ' + ' + Jk.bonusTxt : ''}</span><span>실패해도 잃는 것 없이 다시</span>${tier === 1 ? '<span class="warn">통과하면 원소가 정해진다 · 그 전엔 카드를 눌러 바꿀 수 있다</span>' : ''}</div>
     <div class="btnRow"><button id="trialGo" class="primary">📜 시험 보러 가기</button></div>`;
   $('trialGo').onclick = () => { audio.play('click'); if (tier === 1 && !quizDone) { showQuiz(tr); return; } beginTrial(tr); };
 }
@@ -817,7 +817,7 @@ function finishFight() {
     $('resRewards').innerHTML = passed ? `${Jk.icon} <b>${Jk.name}</b> ${trialDef.tier}차 · ${spell.icon} <b>${spell.name}</b>을 배웠다${trialDef.tier === 1 ? ` · ${Jk.bonusTxt}` : ' · 큰 마법은 ' + (input.st.touch ? '큰 마법 버튼' : 'Q')}`
       : `잃은 것은 없다.${tries >= 2 ? ' 다음엔 힌트를 주고 조건을 낮춘다.' : ''}`;
     $('lootBox').classList.add('hidden');
-    $('resRetry').textContent = passed ? '마구간으로' : '다시 도전'; $('resHub').textContent = passed ? '마구간으로' : '전직관으로';
+    $('resRetry').textContent = passed ? '마구간으로' : '다시 도전'; $('resHub').textContent = passed ? '마구간으로' : trialDef.tier === 1 ? '다른 원소 고르기' : '전직관으로';
     lastResult = { r, rewards: { won: passed }, trial: true, passed };
     audio.play(passed ? 'fanfare' : 'sad');
     return;
