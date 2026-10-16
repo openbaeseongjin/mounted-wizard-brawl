@@ -16,6 +16,7 @@ import { newCareer, normalizeCareer, currentFights, buildRoster, applyResult, ta
 import { trialFor, trialMatchOpts } from './trials.js';
 import { statsFor } from './stats.js';
 import { createMagicView } from './magicView.js';
+import { createElemFx } from './elemFx.js';
 
 const RAPIER_URL = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/+esm';
 const $ = (id) => document.getElementById(id);
@@ -46,7 +47,9 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(76, innerWidth / innerHeight, 0.05, 700);
 camera.rotation.order = 'YXZ';
 const arena = buildArena(scene, renderer, S.shadow === 'low' ? 'low' : 'high');
-const fx = createFx(scene), hud = createHud(), input = createInput(canvas), audio = createAudio(), magicView = createMagicView(scene);
+const fx = createFx(scene), hud = createHud(), input = createInput(canvas), audio = createAudio();
+const elemFx = createElemFx(scene, { fx, camera, low: S.shadow === 'low' }), magicView = createMagicView(scene, elemFx.kit);
+let fxWarm = false;   // 원소 이펙트 재질은 첫 시합에서 한 번 미리 컴파일한다
 audio.setVolume(S.vol);
 function applyShadow() {
   renderer.shadowMap.enabled = S.shadow !== 'off';
@@ -88,7 +91,7 @@ const PERSONA_TXT = {
   rival: '네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.',
   still: '가만히 있는 연습 과녁.',
 };
-const VERSION = 'v0.4a';   // 시험 기록에 같이 적는다
+const VERSION = 'v0.4b';   // 시험 기록에 같이 적는다
 // 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
 let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };
@@ -103,7 +106,7 @@ const MAX_FRAMES = 300;
 let replay = null, pendingReplay = null, replayCd = 0, lastBig = null;
 const bumpsGrowing = [];
 function clearVisuals() { fx.clear(); disposeVisuals(scene, vis); vis = null; bumpsGrowing.length = 0; }
-function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); magicView.clear(); player = null; cam.swP = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
+function stopMatch() { if (match) { match.free(); match = null; } clearVisuals(); magicView.clear(); elemFx.clear(); player = null; cam.swP = null; frames = []; prevF = curF = null; replay = null; pendingReplay = null; hud.replay(false); camera.clearViewOffset(); }
 
 // ---------- 카메라 ----------
 const cam = { pos: V(0, 3, -10), shake: 0, fovKick: 0, cineAng: 0, focus: V(), swP: null, swY: 0, swW: null };   // swP·swY·swW: 몸 흔들림 기준 (bodySway)
@@ -346,14 +349,15 @@ const SIMPLE_ORDER = ['cast', 'hit', 'deflect', 'unhorse', 'pickup', 'thrust', '
 const practiceItems = () => (S.adv ? PRACTICE : SIMPLE_ORDER.map((k) => PRACTICE.find((p) => p.key === k))).map((p) => ({ key: p.key, text: ptext(p) }));
 function practiceTick(key) { if (kind === 'practice' && hud.practiceDone(key)) { audio.play('chime', [784, 1046]); hud.toast('✔ ' + ptext(PRACTICE.find((p) => p.key === key)), 1.6, 'pr'); } }
 function handleEvents(evs) {
-  const pi = player ? player.i : -1;
+  const pi = player ? player.i : -1, ectx = vfxCtx(curF);
   for (const e of evs) {
     const P = e.pos ? V(e.pos.x, e.pos.y, e.pos.z) : null;
+    elemFx.onEvent(e, ectx);   // 원소 마법 그림 (소리·HUD는 아래)
     const F = (i) => match.fighters[i];
     switch (e.type) {
       case 'cast': {
         const f = F(e.i);
-        fx.flash(P, e.kind === 'fireball' ? 0xff7a30 : f.ch.color, 0.8 + e.frac * 2.2, 0.2);
+        if (e.kind !== 'fireball') fx.flash(P, f.ch.color, 0.8 + e.frac * 2.2, 0.2);
         audio.play('cast', P, 0.6 + e.frac * 0.7, e.frac);
         if (e.frac > 0.4) voice(f, 'huff', 0.7);
         if (e.i === pi && tst) { tst.casts++; if (player.horse >= 0 && match.horses[player.horse].speed / Math.sqrt(Math.max(0.05, 1 - e.frac)) > 9) tst.fast++; }   // 쏘기 전 속도로 질주 중이었나
@@ -361,8 +365,7 @@ function handleEvents(evs) {
         break;
       }
       case 'explode': {
-        const c = e.kind === 'fireball' ? 0xff8a3a : new THREE.Color(F(e.owner).ch.color).lerp(new THREE.Color(0xffffff), 0.3).getHex();
-        fx.explosion(P, c, e.r);
+        if (e.kind !== 'fireball') fx.explosion(P, new THREE.Color(F(e.owner).ch.color).lerp(new THREE.Color(0xffffff), 0.3).getHex(), e.r);
         audio.play('boom', P, 0.45 + Math.min(1, e.E / CFG.spell.eRef) * 0.8);
         const d = camera.position.distanceTo(P); cam.shake += Math.max(0, 1 - d / 22) * (0.25 + e.E / CFG.spell.eRef * 0.4);
         const me = e.hits.find((h) => h.i === pi);
@@ -471,24 +474,24 @@ function handleEvents(evs) {
         break;
       case 'surrender': hud.feed(`🏳 ${colorName(F(e.i))} 항복`); break;
       // ---------- 4원소 마법 ----------
-      case 'gust': fx.explosion(P, 0xd8f5e8, e.r * 0.8); audio.play('whoosh', P, 1.2); audio.play('boom', P, 0.4); if (e.i === pi) { cam.shake += 0.3; tut.cast = true; } break;
-      case 'wallUp': fx.dust(P, 14, 0xb08850, 2.5); audio.play('propThud', P, 1); audio.play('thud', P, 0.8); if (e.i === pi) tut.cast = true; break;
-      case 'wallDown': fx.dust(P, 8, 0xb08850, 2); break;
-      case 'wallCrash': fx.burst(P, 0xb08850, 1.4, true); audio.play('thud', P, 1.3); audio.play('ooh', 0.9); hud.feed(`🧱 ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 흙벽에 박았다!`); if (e.i === pi) cam.shake += 0.7; break;
-      case 'whip': audio.play('throw', P, 0.9); fx.sparks(P, 0x6ad0ff, 10, 4); if (e.i === pi) tut.cast = true; if (e.j === pi) hud.toast(`😨 ${CJ(F(e.i), '이/가')} 물채찍으로 나를 묶었다! 더 빨리 달려라`, 2.5, 'whipped'); break;
+      case 'gust': audio.play('whoosh', P, 1.2); audio.play('boom', P, 0.4); if (e.i === pi) { cam.shake += 0.3; tut.cast = true; } break;
+      case 'wallUp': audio.play('propThud', P, 1); audio.play('thud', P, 0.8); if (e.i === pi) tut.cast = true; break;
+      case 'wallDown': break;
+      case 'wallCrash': audio.play('thud', P, 1.3); audio.play('ooh', 0.9); hud.feed(`🧱 ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 흙벽에 박았다!`); if (e.i === pi) cam.shake += 0.7; break;
+      case 'whip': audio.play('throw', P, 0.9); if (e.i === pi) tut.cast = true; if (e.j === pi) hud.toast(`😨 ${CJ(F(e.i), '이/가')} 물채찍으로 나를 묶었다! 더 빨리 달려라`, 2.5, 'whipped'); break;
       case 'whipMiss': if (e.i === pi) hud.toast('물채찍이 빗나갔다 (14m 안의 상대를 겨눠라)', 1.6, 'wm'); break;
-      case 'whipCut': if (e.why !== 'release' && match.fighters[e.j]) fx.sparks(match.fighters[e.j].rider.body.translation(), 0x6ad0ff, 8, 3); break;
-      case 'iceUp': fx.flash(P, 0xbfe9ff, e.r * 1.5, 0.3); audio.play('ting', P, 0.8); if (e.i === pi) tut.cast = true; break;
-      case 'slip': fx.sparks(P, 0xffffff, 14, 5); audio.play('neigh', P, 0.9); hud.feed(`🧊 ${colorName(F(e.i))}의 말이 빙판에서 미끄러졌다!`); break;
+      case 'whipCut': break;
+      case 'iceUp': audio.play('ting', P, 0.8); if (e.i === pi) tut.cast = true; break;
+      case 'slip': audio.play('neigh', P, 0.9); hud.feed(`🧊 ${colorName(F(e.i))}의 말이 빙판에서 미끄러졌다!`); break;
       case 'tornado': audio.play('whoosh', P, 1.4); if (e.i === pi) tut.cast = true; break;
-      case 'fireTornado': fx.flash(P, 0xff8a3a, 4, 0.4); hud.feed('🔥🌪️ 불 회오리!'); break;
-      case 'swallow': fx.flash(P, 0xd9b67c, 1, 0.2); break;
-      case 'fissure': audio.play('boom', P, 0.7); audio.play('thud', P, 1); fx.dust(P, 10, 0xb08850, 1.5); if (e.i === pi) { cam.shake += 0.25; tut.cast = true; } break;
-      case 'trip': fx.dust(P, 12, 0xb08850, 1.5); audio.play('neigh', P, 1); hud.feed(`⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 고꾸라졌다!`); break;
+      case 'fireTornado': hud.feed('🔥🌪️ 불 회오리!'); break;
+      case 'swallow': break;
+      case 'fissure': audio.play('boom', P, 0.7); audio.play('thud', P, 1); if (e.i === pi) { cam.shake += 0.25; tut.cast = true; } break;
+      case 'trip': audio.play('neigh', P, 1); hud.feed(`⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 고꾸라졌다!`); break;
       case 'trail': if (e.on) { audio.play('cast', P, 0.5, 0.2); if (e.i === pi) tut.cast = true; } break;
       case 'zoneFear': if (e.add > 40) audio.play('neigh', P, 0.6); break;
-      case 'steam': fx.dust(P, 16, 0xffffff, 2); audio.play('whoosh', P, 0.8); hud.feed('♨️ 불과 얼음이 만나 김이 솟았다'); break;
-      case 'iceBreak': fx.sparks(P, 0xbfe9ff, 18, 6); audio.play('ting', P, 1); break;
+      case 'steam': audio.play('whoosh', P, 0.8); hud.feed('♨️ 불과 얼음이 만나 김이 솟았다'); break;
+      case 'iceBreak': audio.play('ting', P, 1); break;
       case 'getup': if (e.i === pi) hud.toast('일어났다! <kbd>WASD</kbd> 걷기 · <kbd>Shift</kbd> 뛰기 · <kbd>Space</kbd> 발차기 · 빈 말 옆에서 <kbd>E</kbd>', 3.5); break;
     }
   }
@@ -502,7 +505,7 @@ function queueReplay(focus) {
 function startReplay(focus, tick, onDone) {
   const from = tick - 85, list = frames.filter((fr) => fr.tick >= from);
   if (list.length < 20) { if (onDone) onDone(); return; }
-  replay = { list, pos: 0, focus, onDone, ang: Math.random() * 6 };
+  replay = { list, pos: 0, evK: 0, focus, onDone, ang: Math.random() * 6 };
   hud.replay(true); audio.play('replay');
   replayCd = 8;
 }
@@ -511,6 +514,7 @@ function endReplay() {
   const done = replay.onDone; replay = null; hud.replay(false); acc = 0;
   // 지금 상태로 되돌린다 (주문 그림을 지금 것으로)
   for (const id of fx.spellIds()) fx.spellEnd(id);
+  for (const id of elemFx.fireballIds()) elemFx.fireballEnd(id);
   if (done) done();
 }
 
@@ -738,11 +742,12 @@ function startMatch(fight, how = 'fight', custom = null) {
   if (how === 'attract') opts = { seed: 1 + Math.floor(Math.random() * 9999), mode: 'brawl', roster: ['mukjik', 'beongae', 'gihoe', 'rival'].map((c) => ({ char: c })), countdown: 0.5 };
   else if (how === 'practice') opts = { seed: 7, mode: 'practice', countdown: 1, roster: [{ char: 'maji', isPlayer: true, loadout: { ...career.loadout } }, { char: 'dummy', persona: 'still' }, { char: 'dummy', persona: 'still' }, { char: 'beongae', persona: 'still' }],
     looseWeapons: [{ item: 'oak', x: -4, z: -18 }, { item: 'iron', x: -5.5, z: -18 }, { item: 'lance', x: -7, z: -18 }, { item: 'mace', x: -8.5, z: -18 }, { item: 'crystal', x: -10, z: -18 }] };
-  else if (how === 'free') opts = { seed: 1 + Math.floor(Math.random() * 9999), mode: custom.opp.length === 1 ? 'duel' : 'brawl', countdown: 3, roster: [{ char: 'maji', isPlayer: true, loadout: custom.loadout }, ...custom.opp.map((c) => ({ char: c }))], rivalMimic: rivalMimic(career) };
+  else if (how === 'free') opts = { seed: 1 + Math.floor(Math.random() * 9999), mode: custom.opp.length === 1 ? 'duel' : 'brawl', countdown: 3, roster: [{ char: 'maji', isPlayer: true, loadout: custom.loadout, ...(custom.job ? { job: custom.job, jobTier: custom.tier } : {}) }, ...custom.opp.map((c) => ({ char: c }))], rivalMimic: rivalMimic(career) };
   else if (how === 'trial') opts = trialMatchOpts(trialDef, career, trialAttempt);
   else opts = { seed: fight.seed + career.log.length * 17, mode: fight.mode, roster: buildRoster(career, fight), countdown: 3, rivalMimic: rivalMimic(career) };
   match = createMatch(R, opts);
   vis = buildVisuals(scene, match);
+  if (!fxWarm) { fxWarm = true; elemFx.prewarm(renderer, camera); }
   player = how === 'attract' ? null : match.fighters[0];
   assist = player ? createAssist(match, player.i) : null;
   tst = { n: 0, sum: 0, slow: 0, casts: 0, fast: 0, fell: 0, koMe: 0, taken: 0 };
@@ -968,7 +973,7 @@ function stepOnce() {
   const inputs = {};
   if (player && mode === 'fight') inputs[player.i] = playerInput();
   const evs = match.step(inputs);
-  const fr = makeFrame(match);
+  const fr = makeFrame(match, evs);
   frames.push(fr); if (frames.length > MAX_FRAMES) frames.shift();
   prevF = curF; curF = fr;
   handleEvents(evs);
@@ -1000,19 +1005,27 @@ function renderSpells(A, B, alpha, dt) {
   const amap = new Map(A.spells.map((s) => [s.id, s]));
   for (const sb of B.spells) {
     seen.add(sb.id);
-    const sa = amap.get(sb.id) || sb;
-    const c = sb.kind === 'fireball' ? 0xff7a30 : new THREE.Color(match.fighters[sb.owner].ch.color).lerp(new THREE.Color(0xffffff), 0.35).getHex();
-    fx.spellMove(sb.id, { x: sa.pos.x + (sb.pos.x - sa.pos.x) * alpha, y: sa.pos.y + (sb.pos.y - sa.pos.y) * alpha, z: sa.pos.z + (sb.pos.z - sa.pos.z) * alpha }, dt, c, sb.r);
+    const sa = amap.get(sb.id) || sb, p = { x: sa.pos.x + (sb.pos.x - sa.pos.x) * alpha, y: sa.pos.y + (sb.pos.y - sa.pos.y) * alpha, z: sa.pos.z + (sb.pos.z - sa.pos.z) * alpha };
+    if (sb.kind === 'fireball') { elemFx.fireballMove(sb.id, p, sb.vel, sb.r, dt); continue; }   // 화염구는 원소 이펙트가 그린다
+    fx.spellMove(sb.id, p, dt, new THREE.Color(match.fighters[sb.owner].ch.color).lerp(new THREE.Color(0xffffff), 0.35).getHex(), sb.r);
   }
   for (const id of fx.spellIds()) if (!seen.has(id)) fx.spellEnd(id);
+  for (const id of elemFx.fireballIds()) if (!seen.has(id)) elemFx.fireballEnd(id);
 }
 // 마법 보기용 위치: 지팡이 끝(물채찍 시작) 또는 몸
 function fighterPosOf(F) {
-  return (i, tip) => {
+  const fn = (i, tip) => {
     const fr = F.fighters[i];
     if (tip && fr.weapon >= 0 && vis && vis.weapons[fr.weapon]) { const st = vis.weapons[fr.weapon]; return st.group.localToWorld(V(0, st.len / 2, 0)); }
     return V(fr.p.x, fr.p.y + 0.6, fr.p.z);
   };
+  fn.cam = camera.position;   // 띠(물채찍·회오리)를 카메라 쪽으로 편다
+  return fn;
+}
+// 원소 이펙트에 넘기는 것: 기수 위치, 원소, 막 쏜 화염구 방향
+function vfxCtx(F) {
+  return { fighterPos: fighterPosOf(F), jobOf: (i) => (match && match.fighters[i] ? match.fighters[i].job : null), spellVel: (id) => { const s = F.spells.find((x) => x.id === id); return s ? s.vel : null; },
+    count: F.fighters.length, player: player ? player.i : -1, view, camPos: camera.position };
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -1034,7 +1047,9 @@ function frame(now) {
           const A = replay.list[k], B = replay.list[k + 1], a = replay.pos - k;
           renderFrames(vis, A, B, a, { dt: dt * 0.35, t, player: player ? player.i : -1, view, replay: true });
           renderSpells(A, B, a, dt * 0.35);
-          magicView.update(B, t, fighterPosOf(B));
+          while (replay.evK < k) { replay.evK++; const fr = replay.list[replay.evK]; if (fr.ev) for (const ev of fr.ev) elemFx.onEvent(ev, vfxCtx(fr)); }   // 원소 순간 효과를 다시 낸다
+          magicView.update(B, t, fighterPosOf(B), dt * 0.35);
+          elemFx.update(B, dt * 0.35, vfxCtx(B));
           arena.setFence(B.fenceR);
           const fp = B.fighters[replay.focus].p;
           replay.ang += dt * 0.5;
@@ -1063,7 +1078,8 @@ function frame(now) {
     const alpha = acc / TICK;
     renderFrames(vis, prevF, curF, alpha, { dt: dt * ts, rdt: dt, t, player: player ? player.i : -1, view, hooves });
     renderSpells(prevF, curF, alpha, dt * ts);
-    magicView.update(curF, t, fighterPosOf(curF));
+    magicView.update(curF, t, fighterPosOf(curF), dt * ts);
+    elemFx.update(curF, dt * ts, vfxCtx(curF));
     arena.setFence(prevF.fenceR + (curF.fenceR - prevF.fenceR) * alpha);
     // 카운트다운
     if (match.t < 0.2 && mode === 'fight') {
@@ -1123,13 +1139,13 @@ window.__mw = {
   get view() { return view; }, set view(v) { view = v; }, get replay() { return replay; }, get assistUI() { return assist ? assist.ui : null; },
   startFight(id) { const all = LADDER.flatMap((r) => [...r.fights, r.boss]); goPre(all.find((f) => f.id === id) || all[0]); beginPlay('fight'); },
   practice() { beginPlay('practice'); },
-  free(opp = ['mukjik', 'beongae'], loadout = { staff: 'lance', hat: 'felt', robe: 'quilted', gear: 'nogear' }) { freeSpec = { opp, loadout }; beginPlay('free', freeSpec); },
+  free(opp = ['mukjik', 'beongae'], loadout = { staff: 'lance', hat: 'felt', robe: 'quilted', gear: 'nogear' }, job, tier = 2) { freeSpec = { opp, loadout, job, tier }; beginPlay('free', freeSpec); },
   skip(sec) { for (let k = 0; k < sec * 60 && match && !match.over; k++) stepOnce(); },
   koOthers() { for (const f of match.fighters) if (f !== player) knockOut(match, f, player.i); },
   koMe() { knockOut(match, player, 1); },
   replayNow(focus = 1) { startReplay(focus, match.tick); },
   input: (patch) => Object.assign(ctl, patch),
-  hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient, magicView, scene,
+  hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient, magicView, scene, elemFx,
 };
 
 // 시작: 타이틀 뒤에서 AI 난투를 보여 준다

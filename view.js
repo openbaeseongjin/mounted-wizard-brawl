@@ -4,14 +4,15 @@ import * as THREE from 'three';
 import { CFG, CHARS } from './config.js';
 import { LIMB_NAMES, grabPoint } from './fighter.js';
 import { buildHorse, animateHorse, buildWizard, buildLimbs, buildStaff, placeSeg, solveIK, glowSprite, part, toon } from './models.js';
+import { pickVfxEvents } from './vfxEvents.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const cp = (o) => ({ x: o.x, y: o.y, z: o.z });
 const cq = (o) => ({ x: o.x, y: o.y, z: o.z, w: o.w });
 
 // ---------- 프레임 ----------
-export function makeFrame(m) {
-  return {
+export function makeFrame(m, evs = null) {
+  const fr = {
     tick: m.tick, t: m.t, fenceR: m.fenceR,
     horses: m.horses.map((h) => ({ p: cp(h.body.translation()), q: cq(h.body.rotation()), speed: h.speed, fear: h.fear, gait: h.gait })),
     fighters: m.fighters.map((f) => ({
@@ -30,6 +31,9 @@ export function makeFrame(m) {
     fissures: m.fissures.map((s) => ({ id: s.id, o: { x: s.o.x, z: s.o.z }, dir: { x: s.dir.x, z: s.dir.z }, front: s.front, len: s.len })),
     whips: m.fighters.map((f) => (f.whip ? f.whip.j : -1)),
   };
+  const ev = evs ? pickVfxEvents(evs) : null;   // 원소 이벤트: 다시 보기가 순간 효과를 다시 낸다
+  if (ev) fr.ev = ev;
+  return fr;
 }
 const _pa = V(), _pb = V(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
 function lerpT(a, b, t, outP, outQ) {

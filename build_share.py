@@ -1,5 +1,5 @@
 # 「마상 마법 난투」 데모를 친구에게 보내기 쉬운 HTML 파일 하나로 묶는다.
-# 우리 모듈 16개와 녹음 소리(sfx/*.mp3, base64)를 파일 안에 넣는다. three.js와 Rapier는 jsDelivr에서 받으므로 인터넷이 필요하다.
+# 우리 모듈 전부와 녹음 소리(sfx/*.mp3, base64)를 파일 안에 넣는다. three.js와 Rapier는 jsDelivr에서 받으므로 인터넷이 필요하다.
 # 사용: python build_share.py  -> ../../mw-play.html (프로젝트 폴더, 카톡용) + ../share/mw-play-artifact.html (웹 링크용)
 import os, re
 
@@ -8,7 +8,8 @@ ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 read = lambda *p: open(os.path.join(HERE, *p), encoding='utf-8').read()
 
 # 의존 순서 (앞 모듈이 뒤 모듈을 쓰지 않게)
-ORDER = ['config', 'rng', 'fighter', 'spells', 'ai', 'assist', 'match', 'gauntlet', 'models', 'scene', 'fx', 'view', 'viewport', 'hud', 'input', 'audio']
+ORDER = ['config', 'rng', 'fighter', 'zones', 'spells', 'magic', 'ai', 'assist', 'match', 'gauntlet', 'trials', 'stats', 'models', 'scene', 'fx', 'fxKit', 'elemFx', 'magicView',
+         'vfxEvents', 'view', 'viewport', 'hud', 'input', 'audio']
 OURS = re.compile(r"^import \{([^}]*)\} from '\./(\w+)\.js';\s*$", re.M)
 THREE = "import * as THREE from 'three';"
 
@@ -17,6 +18,11 @@ def convert(src):
     src = src.replace(THREE + '\n', '').replace(THREE, '')
     assert not re.search(r"^import .* from '(?!\./)", src, re.M), 'unexpected import'
     return OURS.sub(lambda m: f"const {{{m.group(1)}}} = __{m.group(2)};", src)
+
+# 빠진 모듈이 없게: 모든 모듈이 자기보다 앞에 있는 모듈만 쓰는지 확인한다 (v0.4a 때 목록을 안 고쳐 공유본이 깨질 뻔했다)
+for k, name in enumerate(ORDER + ['main']):
+    for dep in OURS.findall(read(name + '.js')):
+        assert dep[1] in ORDER[:k], f'{name}.js가 쓰는 {dep[1]}.js가 ORDER에 없거나 뒤에 있다'
 
 parts = []
 for name in ORDER:
