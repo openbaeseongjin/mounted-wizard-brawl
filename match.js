@@ -22,6 +22,18 @@ export const PROP_SPOTS = [
   { kind: 'hay', a: 0.25, r: 35 }, { kind: 'barrel', a: 0.32, r: 37 }, { kind: 'hay', a: 0.75, r: 36 }, { kind: 'barrel', a: 0.68, r: 34 },
   { kind: 'hay', a: 1.25, r: 35 }, { kind: 'barrel', a: 1.18, r: 37 }, { kind: 'hay', a: 1.75, r: 36 }, { kind: 'barrel', a: 1.82, r: 34 },
 ];
+// 장소별 소품 (v0.5, venues.js 장소 이름). 나무 상자 더미(stack = 쌓은 개수, 부딪히면 무너진다)·과녁(높고 가늘어 잘 넘어진다)·무기 걸이(넓고 얇은 틀, 앞뒤로 넘어간다)
+// a = 각도/π: 출발선 축(0·0.5·1·1.5)에서 0.08 넘게 비킨다. 마구간 마당은 연습장처럼 많이, 결승은 적게
+const SPRING_PROPS = [...PROP_SPOTS, { kind: 'target', a: 0.4, r: 30 }, { kind: 'crate', a: 1.1, r: 31, stack: 3 }, { kind: 'target', a: 1.6, r: 29 }, { kind: 'crate', a: 1.9, r: 30, stack: 2 },
+  { kind: 'rack', a: 0.62, r: 31 }];
+export const PROP_SETS = {
+  stable: [...PROP_SPOTS, { kind: 'crate', a: 0.12, r: 30, stack: 3 }, { kind: 'target', a: 0.4, r: 26 }, { kind: 'target', a: 0.62, r: 28 }, { kind: 'crate', a: 0.88, r: 31, stack: 2 },
+    { kind: 'crate', a: 1.12, r: 30, stack: 3 }, { kind: 'target', a: 1.4, r: 27 }, { kind: 'hay', a: 1.6, r: 30 }, { kind: 'target', a: 1.88, r: 26 },
+    { kind: 'rack', a: 0.27, r: 29 }, { kind: 'rack', a: 1.73, r: 29 }],
+  spring: SPRING_PROPS,
+  rain: SPRING_PROPS,
+  castle: [...PROP_SPOTS, { kind: 'target', a: 0.38, r: 31 }, { kind: 'target', a: 1.62, r: 31 }, { kind: 'rack', a: 0.62, r: 31 }],
+};
 
 // opts: { seed, mode:'duel'|'brawl'|'practice'|'free', roster:[{char, loadout, isPlayer, persona}], countdown=3, rivalMimic, spawns, looseWeapons:[{item,x,z}], props=true }
 export function createMatch(R, opts) {
@@ -80,15 +92,30 @@ export function createMatch(R, opts) {
   }
   // 소품: 건초 더미·나무통
   if (opts.props !== false) {
-    for (const p of PROP_SPOTS) {
-      const pos = { x: Math.sin(p.a * Math.PI) * p.r, z: Math.cos(p.a * Math.PI) * p.r };
-      const hay = p.kind === 'hay';
-      const body = world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(pos.x, hay ? 0.55 : 0.46, pos.z)
-        .setRotation(hay ? { x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 } : { x: 0, y: 0, z: 0, w: 1 }).setLinearDamping(0.4).setAngularDamping(0.8));
-      const col = world.createCollider((hay ? R.ColliderDesc.cylinder(0.45, 0.55) : R.ColliderDesc.cylinder(0.45, 0.3)).setMass(hay ? 35 : 18).setFriction(0.8).setRestitution(0.1)
-        .setActiveEvents(R.ActiveEvents.COLLISION_EVENTS), body);
-      m.info.set(col.handle, { kind: 'prop', p: m.props.length });
-      m.props.push({ kind: p.kind, body, col });
+    const ev = (d) => d.setFriction(0.8).setRestitution(0.1).setActiveEvents(R.ActiveEvents.COLLISION_EVENTS);
+    for (const p of (opts.venue && PROP_SETS[opts.venue]) || PROP_SPOTS) {
+      const pos = { x: Math.sin(p.a * Math.PI) * p.r, z: Math.cos(p.a * Math.PI) * p.r }, yaw = p.a * Math.PI;   // 과녁·상자는 가운데를 본다
+      const yq = { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) };
+      for (let k = 0; k < (p.stack || 1); k++) {
+        let desc, cols;
+        if (p.kind === 'hay') { desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x, 0.55, pos.z).setRotation({ x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 }); cols = [R.ColliderDesc.cylinder(0.45, 0.55).setMass(35)]; }
+        else if (p.kind === 'barrel') { desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x, 0.46, pos.z); cols = [R.ColliderDesc.cylinder(0.45, 0.3).setMass(18)]; }
+        else if (p.kind === 'crate') {   // 0.7 m 상자, 위로 쌓는다 (조금씩 어긋나게)
+          const o = k * 0.06;
+          desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x + o, 0.35 + k * 0.71, pos.z - o).setRotation(yq); cols = [R.ColliderDesc.cuboid(0.35, 0.35, 0.35).setMass(18)];
+        } else if (p.kind === 'rack') {   // 무기 걸이: 좁은 받침 + 넓고 얇은 틀(지팡이 걸린 판), 원점 = 받침 바닥. 얇은 쪽(가운데 방향)으로 넘어간다
+          desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x, 0, pos.z).setRotation(yq);
+          cols = [R.ColliderDesc.cuboid(0.5, 0.04, 0.16).setTranslation(0, 0.04, 0).setMass(5), R.ColliderDesc.cuboid(0.48, 0.5, 0.06).setTranslation(0, 0.6, 0).setMass(15)];
+        } else {   // target: 받침 + 기둥 + 둥근 판(무게 중심이 높다), 원점 = 받침 바닥
+          desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x, 0, pos.z).setRotation(yq);
+          cols = [R.ColliderDesc.cuboid(0.3, 0.05, 0.3).setTranslation(0, 0.05, 0).setMass(6), R.ColliderDesc.cuboid(0.05, 0.7, 0.05).setTranslation(0, 0.75, 0).setMass(4),
+            R.ColliderDesc.cylinder(0.04, 0.5).setTranslation(0, 1.35, 0.06).setRotation({ x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 }).setMass(12)];
+        }
+        const body = world.createRigidBody(desc.setLinearDamping(0.4).setAngularDamping(0.8));
+        const made = cols.map((c) => world.createCollider(ev(c), body));
+        for (const c of made) m.info.set(c.handle, { kind: 'prop', p: m.props.length });
+        m.props.push({ kind: p.kind, body, col: made[0] });
+      }
     }
   }
 

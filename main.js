@@ -17,6 +17,10 @@ import { trialFor, trialMatchOpts } from './trials.js';
 import { statsFor } from './stats.js';
 import { createMagicView } from './magicView.js';
 import { createElemFx } from './elemFx.js';
+import { createPostFx } from './postfx.js';
+import { loadRigAssets } from './assets.js';
+import { createRig } from './rigModels.js';
+import { createVenues, venueFor } from './venues.js';
 
 const RAPIER_URL = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/+esm';
 const $ = (id) => document.getElementById(id);
@@ -30,15 +34,16 @@ catch (e) { $('boot').textContent = '물리 엔진(Rapier)을 못 불러왔어�
 
 // ---------- 설정 (이 브라우저에만) ----------
 const SET_KEY = 'mw-demo-settings-v1';
-const DEFAULTS = { sens: 1, swing: 1, fov: 76, sway: 1, vol: 0.85, inv: false, replay: true, shadow: 'high', orient: '', adv: false };   // adv: 고급 조작(하프소드식). 기본은 쉬운 조작   // orient: 폰 화면 방향 ('' 아직 안 고름 · 'land' 가로 · 'port' 세로)
-let S = { ...DEFAULTS }, hadSettings = false;
-try { const s = localStorage.getItem(SET_KEY); if (s) { S = { ...DEFAULTS, ...JSON.parse(s) }; hadSettings = true; } } catch (e) { /* 기본값 */ }
+const DEFAULTS = { sens: 1, swing: 1, fov: 76, sway: 1, vol: 0.85, inv: false, replay: true, shadow: 'high', orient: '', adv: false, gfx: 'high', models: 'real' };   // models: 캐릭터 모델 'real' 진짜(KayKit·Quaternius) · 'simple' 도형   // gfx: 화면 효과(postfx.js) 'high' 켬 · 'normal' 끔   // adv: 고급 조작(하프소드식). 기본은 쉬운 조작   // orient: 폰 화면 방향 ('' 아직 안 고름 · 'land' 가로 · 'port' 세로)
+let S = { ...DEFAULTS }, hadSettings = false, savedGfx = false;
+try { const s = localStorage.getItem(SET_KEY); if (s) { const o = JSON.parse(s); S = { ...DEFAULTS, ...o }; hadSettings = true; savedGfx = 'gfx' in o; } } catch (e) { /* 기본값 */ }
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(S)); } catch (e) { /* 저장 못 해도 계속 */ } }
 
 // ---------- 렌더러 ----------
 const canvas = $('c');
 const lowQ = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
 if (lowQ && !hadSettings) S.shadow = 'low';
+if (!savedGfx) S.gfx = lowQ ? 'normal' : 'high';   // 화면 효과는 처음에 PC 켬 · 폰 끔 (예전 설정이 있어도 이 항목은 새로 정한다)
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, lowQ ? 1.5 : 2));
 renderer.shadowMap.enabled = S.shadow !== 'off'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -50,6 +55,44 @@ const arena = buildArena(scene, renderer, S.shadow === 'low' ? 'low' : 'high');
 const fx = createFx(scene), hud = createHud(), input = createInput(canvas), audio = createAudio();
 const elemFx = createElemFx(scene, { fx, camera, low: S.shadow === 'low' }), magicView = createMagicView(scene, elemFx.kit);
 let fxWarm = false;   // 원소 이펙트 재질은 첫 시합에서 한 번 미리 컴파일한다
+// 그래픽 비교 시험 (?look=pp | all): 화면 효과를 켜고 카메라를 고정해 찍는다. 주소에 없으면 불러오지도 않는다
+const LOOK = new URLSearchParams(location.search).get('look');
+const look = LOOK ? await (await import('./lookPreview.js')).createLook({ renderer, scene, camera, mode: LOOK,
+  get: { vis: () => vis, frame: () => curF, match: () => match, player: () => (player ? player.i : -1), view: () => view } }) : null;
+// 화면 효과 (postfx.js): 켤 때 한 번 만든다. 못 만들면(인터넷·WebGL2 없음) 끈다
+let post = null, postBusy = false, gfxEma = 1 / 60, gfxT = 0;
+function applyGfx() {
+  if (look || S.gfx !== 'high' || post || postBusy) return;
+  if (!renderer.capabilities.isWebGL2) { S.gfx = 'normal'; return; }
+  postBusy = true;
+  createPostFx({ renderer, scene, camera }).then((p) => { post = p; }).catch((e) => { console.warn('화면 효과를 못 켰다', e); S.gfx = 'normal'; }).finally(() => { postBusy = false; });
+}
+applyGfx();
+// 진짜 모델 (assets.js · rigModels.js): 도형으로 바로 시작하고, 다 불러오면 다음 프레임부터 바꿔 그린다. 못 불러오면 도형 그대로
+// 배경(venues.js)도 같은 자산이라 같이 켜고 끈다: 시합마다 장소·날씨가 다르다
+let rig = null, rigBusy = false, venues = null, curVenue = 'spring';
+function applyModels() {
+  if (S.models !== 'real') { if (rig) { rig.off(vis); rig.offDisplay(display); } if (venues) venues.set(null); return; }
+  if (venues) venues.set(curVenue);
+  if (rig || rigBusy) return;
+  rigBusy = true;
+  loadRigAssets().then(async (a) => {
+    if (!a) return;
+    const r = await createRig(a);
+    venues = await createVenues(scene, arena, a.map);
+    rig = r;
+    if (S.models === 'real') venues.set(curVenue);
+  }).catch((e) => { console.warn('진짜 모델을 못 만들었다 · 도형으로 논다', e); }).finally(() => { rigBusy = false; });
+}
+function setVenue(name) { curVenue = name; if (venues && S.models === 'real') venues.set(name); }
+applyModels();
+// 이번 프레임에 쓸 rig: 켜져 있으면 지금 시합 비주얼에 붙인다
+function rigNow() {
+  if (!rig || S.models !== 'real' || !vis || !match) return null;
+  if (!vis.rig) rig.attach(vis, match);
+  return rig;
+}
+const draw = () => { if (look) look.render(); else if (post && S.gfx === 'high') post.render(); else renderer.render(scene, camera); };
 audio.setVolume(S.vol);
 function applyShadow() {
   renderer.shadowMap.enabled = S.shadow !== 'off';
@@ -326,7 +369,7 @@ function voice(f, kindV, v = 1) {
 function flingHat(i, vel) {
   const s = vis.fighters[i]; if (!s || !s.hatOn) return;
   const hat = s.w.hat, wp = V(), wq = new THREE.Quaternion(); hat.getWorldPosition(wp); hat.getWorldQuaternion(wq);
-  const clone = hat.clone(true); clone.quaternion.copy(wq); hat.visible = false; s.hatOn = false;
+  const clone = hat.clone(true); clone.quaternion.copy(wq); hat.getWorldScale(clone.scale); hat.visible = false; s.hatOn = false;   // 진짜 모델이면 모자가 머리 뼈 밑에 있어 세계 크기로
   fx.fling(clone, wp, vel);
 }
 const PRACTICE = [
@@ -573,6 +616,7 @@ function poseDisplay(dt, t) {
     const end = poseLimb(leg, hip, foot, 0.43, 0.43, V(0.3 * side, 0, 1)); leg.foot.position.copy(end);
   }
   d.st.glow.scale.setScalar(0.3 + Math.sin(t * 2) * 0.05);
+  if (rig && S.models === 'real') { if (!d.rig) rig.attachDisplay(d, career.loadout); rig.updateDisplay(d); }   // 진짜 모델이면 위 도형 자세를 따라간다
   cam.cineAng += dt * 0.25;
   camera.position.set(Math.sin(cam.cineAng) * 6.2, 2.7, Math.cos(cam.cineAng) * 6.2);
   camera.lookAt(0, 2.0, 0); camera.fov = fitFov(50);
@@ -665,7 +709,7 @@ let trialDef = null, trialAttempt = 0, jobPick = null, quizDone = false;
 function goJobs() {
   const tier = jobOffer(career);
   if (!tier) { goHub(); return; }
-  stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('jobs');
+  stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('jobs'); setVenue('stable');
   if (!display) buildDisplay();
   jobPick = career.job || jobPick;
   $('jobsQuiz').classList.add('hidden');
@@ -712,7 +756,7 @@ function beginTrial(tr) {
 function leaveFight() { input.exitLock(); input.st.enabled = false; input.showTouch(false); document.body.classList.remove('playing'); hud.show(false); hud.practice(null); hud.trial(null); paused = false; }
 function goTitle() { stopMatch(); leaveFight(); show('title'); startMatch(null, 'attract'); }
 function goHub() {
-  stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('hub');
+  stopMatch(); leaveFight(); mode = 'hub'; kind = 'gauntlet'; show('hub'); setVenue('stable');
   buildDisplay(); renderHub();
   arena.setFence(CFG.arena.r0);
 }
@@ -745,6 +789,8 @@ function startMatch(fight, how = 'fight', custom = null) {
   else if (how === 'free') opts = { seed: 1 + Math.floor(Math.random() * 9999), mode: custom.opp.length === 1 ? 'duel' : 'brawl', countdown: 3, roster: [{ char: 'maji', isPlayer: true, loadout: custom.loadout, ...(custom.job ? { job: custom.job, jobTier: custom.tier } : {}) }, ...custom.opp.map((c) => ({ char: c }))], rivalMimic: rivalMimic(career) };
   else if (how === 'trial') opts = trialMatchOpts(trialDef, career, trialAttempt);
   else opts = { seed: fight.seed + career.log.length * 17, mode: fight.mode, roster: buildRoster(career, fight), countdown: 3, rivalMimic: rivalMimic(career) };
+  setVenue(venueFor(how, fight));
+  opts.venue = curVenue;   // 장소별 시합장 소품 (match.js PROP_SETS)
   match = createMatch(R, opts);
   vis = buildVisuals(scene, match);
   if (!fxWarm) { fxWarm = true; elemFx.prewarm(renderer, camera); }
@@ -909,9 +955,9 @@ input.st.onLockChange = (locked) => { if (!locked && mode === 'fight' && !paused
 function openSettings(from) {
   settingsFrom = from; show('settings');
   const bind = (id, key, fmt) => { const el = $(id); if (el.type === 'checkbox') el.checked = !!S[key]; else el.value = S[key]; const out = $('v' + id.slice(1)); const upd = () => { if (out && fmt) out.textContent = fmt(S[key]); }; upd();
-    el.oninput = el.onchange = () => { S[key] = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : +el.value; upd(); saveSettings(); if (key === 'vol') audio.setVolume(S.vol); if (key === 'shadow') applyShadow(); }; };
+    el.oninput = el.onchange = () => { S[key] = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : +el.value; upd(); saveSettings(); if (key === 'vol') audio.setVolume(S.vol); if (key === 'shadow') applyShadow(); if (key === 'gfx') applyGfx(); if (key === 'models') applyModels(); }; };
   bind('sSens', 'sens', (v) => v.toFixed(2) + '×'); bind('sSwing', 'swing', (v) => v.toFixed(2) + '×'); bind('sFov', 'fov', (v) => v + '°'); bind('sSway', 'sway', (v) => Math.round(v * 100) + '%'); bind('sVol', 'vol', (v) => Math.round(v * 100) + '%');
-  bind('sInv', 'inv'); bind('sReplay', 'replay'); bind('sShadow', 'shadow'); bind('sAdv', 'adv');
+  bind('sInv', 'inv'); bind('sReplay', 'replay'); bind('sShadow', 'shadow'); bind('sGfx', 'gfx'); bind('sModels', 'models'); bind('sAdv', 'adv');
   $('sAdv').addEventListener('change', applyControls);
 }
 $('setDone').onclick = () => { audio.play('click'); if (settingsFrom === 'pause') show('pause'); else if (settingsFrom === 'hub') show('hub'); else show('title'); };
@@ -1031,6 +1077,11 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now; lastDt = dt;
   if (mode === 'fight' && player && tst && !replay && !paused) { tst.n++; tst.sum += dt; if (dt > 0.025) tst.slow++; }
+  // 화면 효과를 켰는데 시합 중에 3초 넘게 느리면(평균 28ms, 약 35fps 아래) 끄고 알린다
+  if (post && S.gfx === 'high' && mode === 'fight' && !paused && !replay) {
+    gfxEma += (dt - gfxEma) * 0.02; gfxT += dt;
+    if (gfxT > 3 && gfxEma > 0.028) { S.gfx = 'normal'; saveSettings(); hud.toast('화면이 느려서 「화면 효과」를 껐어요 · 설정에서 다시 켤 수 있어요', 3.5, 'gfx'); }
+  } else { gfxEma = 1 / 60; gfxT = 0; }
   const t = now / 1000;
   replayCd = Math.max(0, replayCd - dt);
   for (let k = bumpsGrowing.length - 1; k >= 0; k--) { const b = bumpsGrowing[k]; b.scale.multiplyScalar(1 + dt * 6); if (b.scale.x >= 1) { b.scale.setScalar(1); bumpsGrowing.splice(k, 1); } }
@@ -1045,7 +1096,7 @@ function frame(now) {
         if (k >= replay.list.length - 1) endReplay();
         else {
           const A = replay.list[k], B = replay.list[k + 1], a = replay.pos - k;
-          renderFrames(vis, A, B, a, { dt: dt * 0.35, t, player: player ? player.i : -1, view, replay: true });
+          renderFrames(vis, A, B, a, { dt: dt * 0.35, t, player: player ? player.i : -1, view, replay: true, rig: rigNow() });
           renderSpells(A, B, a, dt * 0.35);
           while (replay.evK < k) { replay.evK++; const fr = replay.list[replay.evK]; if (fr.ev) for (const ev of fr.ev) elemFx.onEvent(ev, vfxCtx(fr)); }   // 원소 순간 효과를 다시 낸다
           magicView.update(B, t, fighterPosOf(B), dt * 0.35);
@@ -1058,7 +1109,7 @@ function frame(now) {
           camera.fov = fitFov(55); camera.updateProjectionMatrix();
           arena.update(t, dt, fp);
           fx.update(dt * 0.35, camera.position);
-          renderer.render(scene, camera);
+          draw();
           return;
         }
       }
@@ -1076,7 +1127,7 @@ function frame(now) {
     while (acc >= TICK && n < 6) { stepOnce(); acc -= TICK; n++; }
     if (n >= 6) acc = 0;
     const alpha = acc / TICK;
-    renderFrames(vis, prevF, curF, alpha, { dt: dt * ts, rdt: dt, t, player: player ? player.i : -1, view, hooves });
+    renderFrames(vis, prevF, curF, alpha, { dt: dt * ts, rdt: dt, t, player: player ? player.i : -1, view, hooves, rig: rigNow() });
     renderSpells(prevF, curF, alpha, dt * ts);
     magicView.update(curF, t, fighterPosOf(curF), dt * ts);
     elemFx.update(curF, dt * ts, vfxCtx(curF));
@@ -1129,7 +1180,7 @@ function frame(now) {
     if (b !== topH) { topH = b; document.documentElement.style.setProperty('--topH', b + 'px'); }
   }
   fx.update(dt, camera.position);
-  renderer.render(scene, camera);
+  draw();
 }
 let layoutT = 0, topH = -1;
 
@@ -1143,7 +1194,10 @@ window.__mw = {
   skip(sec) { for (let k = 0; k < sec * 60 && match && !match.over; k++) stepOnce(); },
   koOthers() { for (const f of match.fighters) if (f !== player) knockOut(match, f, player.i); },
   koMe() { knockOut(match, player, 1); },
+  ko(i) { knockOut(match, match.fighters[i], player ? player.i : 0); },   // 시험용: 한 명만 기절 (시합이 안 끝나게)
   replayNow(focus = 1) { startReplay(focus, match.tick); },
+  freeze(on) { paused = on; },   // 화면 비교용: 일시정지 화면 없이 시뮬만 멈춘다
+  get look() { return look; }, get rig() { return rig; }, get venues() { return venues; }, get vis() { return vis; }, get post() { return post && S.gfx === 'high' ? post : null; }, renderer,
   input: (patch) => Object.assign(ctl, patch),
   hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient, magicView, scene, elemFx,
 };

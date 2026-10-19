@@ -63,9 +63,28 @@ export function buildVisuals(scene, m) {
   }
   for (const p of m.props) {
     const pg = new THREE.Group(); g.add(pg);
+    pg.userData.kind = p.kind;
     if (p.kind === 'hay') {
       part(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 16), 0xe2c169, pg, { outline: 0.02 });
       for (const y of [-0.25, 0.25]) part(new THREE.TorusGeometry(0.56, 0.02, 4, 18), 0xa8823a, pg, { pos: [0, y, 0], rot: [Math.PI / 2, 0, 0], outline: 0 });
+    } else if (p.kind === 'crate') {   // 0.7 m 나무 상자 (원점 = 가운데)
+      part(new THREE.BoxGeometry(0.7, 0.7, 0.7), 0xb07c45, pg, { outline: 0.02 });
+      for (const z of [-0.36, 0.36]) part(new THREE.BoxGeometry(0.72, 0.1, 0.02), 0x7a522c, pg, { pos: [0, 0, z], rot: [0, 0, 0.78], outline: 0 });
+    } else if (p.kind === 'rack') {   // 무기 걸이: 받침 + 기둥 둘 + 가로대 둘 + 걸린 지팡이 넷 (원점 = 받침 바닥)
+      part(new THREE.BoxGeometry(1.0, 0.08, 0.32), 0x7a522c, pg, { pos: [0, 0.04, 0], outline: 0.012 });
+      for (const x of [-0.45, 0.45]) part(new THREE.BoxGeometry(0.07, 1.05, 0.07), 0x8a5a32, pg, { pos: [x, 0.6, 0], outline: 0.01 });
+      for (const y of [0.4, 1.0]) part(new THREE.BoxGeometry(0.96, 0.05, 0.06), 0x6b4423, pg, { pos: [0, y, 0.02], outline: 0.008 });
+      [[-0.27, 0x8a6a44, 0x9fe8ff], [-0.09, 0x6f7681, 0xffb37a], [0.09, 0x6b4a2a, 0xa8f0ff], [0.27, 0xd9d2f0, 0xd58bff]].forEach(([x, c, tip]) => {
+        part(new THREE.CylinderGeometry(0.022, 0.026, 1.05, 6), c, pg, { pos: [x, 0.62, 0.07], rot: [-0.12, 0, 0], outline: 0.006 });
+        part(new THREE.OctahedronGeometry(0.045, 0), tip, pg, { pos: [x, 1.18, 0.0], outline: 0 });
+      });
+    } else if (p.kind === 'target') {   // 과녁: 받침 + 기둥 + 둥근 판 (원점 = 받침 바닥)
+      part(new THREE.BoxGeometry(0.6, 0.1, 0.6), 0x7a522c, pg, { pos: [0, 0.05, 0], outline: 0.015 });
+      part(new THREE.BoxGeometry(0.1, 1.4, 0.1), 0x8a5a32, pg, { pos: [0, 0.75, 0], outline: 0.012 });
+      part(new THREE.CylinderGeometry(0.5, 0.5, 0.08, 24), 0xf2ece0, pg, { pos: [0, 1.35, 0.06], rot: [Math.PI / 2, 0, 0], outline: 0.015 });
+      for (const [r0, r1, c] of [[0.3, 0.42, 0xe8483b], [0, 0.14, 0xe8483b]]) for (const z of [0.105, 0.015]) {
+        const ring = part(new THREE.RingGeometry(r0, r1, 24), c, pg, { pos: [0, 1.35, z], outline: 0 }); if (z < 0.06) ring.rotation.y = Math.PI;
+      }
     } else {
       part(new THREE.CylinderGeometry(0.28, 0.3, 0.9, 14), 0x8a5a32, pg, { outline: 0.02 });
       for (const y of [-0.32, 0, 0.32]) part(new THREE.TorusGeometry(0.3, 0.022, 4, 16), 0x5a5f66, pg, { pos: [0, y, 0], rot: [Math.PI / 2, 0, 0], outline: 0 });
@@ -77,7 +96,7 @@ export function buildVisuals(scene, m) {
 export function disposeVisuals(scene, vis) {
   if (!vis) return;
   scene.remove(vis.group);
-  vis.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  vis.group.traverse((o) => { if (o.geometry && !o.userData.rig) o.geometry.dispose(); });   // 진짜 모델 메시는 원본과 모양을 같이 쓴다 → 버리지 않는다
 }
 
 // ---------- 그리기 ----------
@@ -194,6 +213,8 @@ export function renderFrames(vis, A, B, alpha, ctx) {
     w.head.visible = !(i === ctx.player && ctx.view === 'fp' && !ctx.replay);
     tickFlash(s, ctx.rdt ?? dt);
   });
+  // 진짜 모델(rigModels.js): 위에서 놓은 도형 팔다리 자리를 모델 뼈가 따라간다
+  if (ctx.rig && vis.rig) ctx.rig.update(vis, B, ctx);
 }
 
 // 맞은 몸 번쩍임: 잠깐 몸 전체를 흰색(크게 맞으면 붉은색)으로 바꾼다
@@ -224,7 +245,7 @@ export function headKick(vis, i, dirWorld, power, rootQ) {
 // 혹: 머리를 세게 맞은 자리에 부풀어 오른다 (유혈 대신)
 export function addBump(vis, i, hitWorld) {
   const s = vis.fighters[i]; if (!s || s.bumps >= 4) return;
-  const head = s.w.head;
+  const head = s.rigHead || s.w.head;   // 진짜 모델이면 모델 머리에 (게임 머리와 같은 크기의 틀)
   head.updateMatrixWorld(true);
   const lp = head.worldToLocal(hitWorld.clone());
   if (lp.length() < 1e-3) lp.set(0, 1, 0);

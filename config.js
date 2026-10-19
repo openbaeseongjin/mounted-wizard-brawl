@@ -103,30 +103,30 @@ export const PERSONAS = {
   flee: { mode: 'flee', chargeGoal: 0, castEvery: 0, cone: 0, deflect: 0, swing: 0, gallop: true, passOffset: 0, react: 0.5, thrust: false, grab: 0, throw: 0, kick: 0, parry: 0 },
 };
 
-// 건틀릿 사다리 (데모: 랭크 2단계)
+// 건틀릿 사다리 (데모: 랭크 2단계). venue = 배경 장소 (venues.js: stable 마구간 마당 · spring 봄 시합장 · rain 비 온 뒤 · castle 성 앞 결승)
 export const LADDER = [
   {
     name: '마구간 견습', unlock: 200,
     fights: [
-      { id: 'f1', title: '첫 시합: 허수아비 마법사', mode: 'duel', opp: ['dummy'], base: 100, seed: 11, tutorial: true,
+      { id: 'f1', venue: 'stable', title: '첫 시합: 허수아비 마법사', mode: 'duel', opp: ['dummy'], base: 100, seed: 11, tutorial: true,
         line: ['마지', '허수아비라도 시합은 시합이야. 고집아, 천천히 가자.'] },
-      { id: 'f2', title: '3인 난투', mode: 'brawl', opp: ['mukjik', 'beongae'], base: 150, seed: 21,
+      { id: 'f2', venue: 'stable', title: '3인 난투', mode: 'brawl', opp: ['mukjik', 'beongae'], base: 150, seed: 21,
         line: ['마지', '둘이 싸우게 두고… 느려진 쪽을 노리자.'] },
     ],
-    boss: { id: 'b1', title: '랭크 결정전: 마구간 대장 돌쇠', mode: 'duel', opp: ['boss1'], base: 200, seed: 31,
+    boss: { id: 'b1', venue: 'stable', title: '랭크 결정전: 마구간 대장 돌쇠', mode: 'duel', opp: ['boss1'], base: 200, seed: 31,
       line: ['돌쇠', '견습 주제에 내 마구간을 넘봐? 땅이 너를 막을 거다.'] },
   },
   {
     name: '시골 기수', unlock: 450,
     fights: [
-      { id: 'f3', title: '4인 난투: 봄 시합장', mode: 'brawl', opp: ['mukjik', 'beongae', 'gihoe'], base: 200, seed: 41,
+      { id: 'f3', venue: 'spring', title: '4인 난투: 봄 시합장', mode: 'brawl', opp: ['mukjik', 'beongae', 'gihoe'], base: 200, seed: 41,
         line: ['마지', '셋이 다 나만 보면 어쩌지… 아니, 서로 싸우겠지.'] },
-      { id: 'f4', title: '4인 난투: 비 온 뒤', mode: 'brawl', opp: ['gihoe', 'beongae', 'mukjik'], base: 200, seed: 51,
+      { id: 'f4', venue: 'rain', title: '4인 난투: 비 온 뒤', mode: 'brawl', opp: ['gihoe', 'beongae', 'mukjik'], base: 200, seed: 51,
         oppLoadout: { beongae: { staff: 'crystal', hat: 'felt', robe: 'quilted', gear: 'spurs' } },
         oppJob: { beongae: ['fire', 2] },
         line: ['고집이', '(푸르르… 오늘은 땅이 무르다)'] },
     ],
-    boss: { id: 'b2', title: '결승: 라이벌 세린', mode: 'duel', opp: ['rival'], base: 250, seed: 61, final: true,
+    boss: { id: 'b2', venue: 'castle', title: '결승: 라이벌 세린', mode: 'duel', opp: ['rival'], base: 250, seed: 61, final: true,
       line: ['세린', '네가 쏘는 버릇, 다 봤어. 그대로 돌려줄게.'] },
   },
 ];

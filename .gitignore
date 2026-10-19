@@ -4,3 +4,6 @@ test/_*.mjs
 __pycache__/
 *.log
 .playwright-mcp/
+
+# 진짜 모델 원본(기획 시안용, 큼). 게임은 tools/pack_assets.mjs 가 만든 assets/rig 를 쓴다. 원본 출처: assets/rig/CREDITS.md
+assets/look/

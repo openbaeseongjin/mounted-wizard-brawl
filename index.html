@@ -303,7 +303,7 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
     <b>좌클릭 누른 채 마우스</b> 휘두르기 · <kbd>C</kbd> 찌르기 · <kbd>Q</kbd> 잡아 끌어내리기 · <kbd>E</kbd> 줍기·던지기·다시 타기 · 걸을 땐 <kbd>Space</kbd> 발차기<br>
     처음이면 <b>연습장</b>에서 가만히 있는 허수아비로 동작을 하나씩 해 보세요.
   </div>
-  <small>데모 v0.3b · PC + 마우스 권장 (폰은 가로로) · 그래픽은 코드로 만든 임시판<br>녹음 소리: Kenney · HaelDB (CC0) · 말발굽 congusbongus (CC BY 4.0) · 말 울음 Briefer 외 2015, Scientific Reports (CC BY 4.0)</small>
+  <small>데모 v0.5 · PC + 마우스 권장 (폰은 가로로) · 3D 모델: KayKit (Kay Lousberg) · Quaternius (CC0)<br>녹음 소리: Kenney · HaelDB (CC0) · 말발굽 congusbongus (CC BY 4.0) · 말 울음 Briefer 외 2015, Scientific Reports (CC BY 4.0)</small>
 </section>
 
 <section id="hub" class="screen hidden"><div class="panel">
@@ -388,6 +388,8 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
   <div class="setRow"><label for="sReplay">낙마 다시 보기</label><input id="sReplay" type="checkbox" style="justify-self:start"><span></span></div>
   <div class="setRow"><label for="sAdv">고급 조작</label><input id="sAdv" type="checkbox" style="justify-self:start"><span style="font-size:12px;opacity:.8">하프소드식: 마우스로 직접 휘두르기 · 찌르기(C) · 잡기(Q) · 던지기</span></div>
   <div class="setRow"><label for="sShadow">그림자</label><select id="sShadow" style="font-family:inherit;font-size:14px;border:2px solid var(--ink);border-radius:8px;padding:3px"><option value="high">선명하게</option><option value="low">가볍게</option><option value="off">끄기</option></select><span></span></div>
+  <div class="setRow"><label for="sGfx">화면 효과</label><select id="sGfx" style="font-family:inherit;font-size:14px;border:2px solid var(--ink);border-radius:8px;padding:3px"><option value="high">켜기 · 그림자 깊이·빛 번짐·색 보정</option><option value="normal">끄기 · 가볍게 (폰 권장)</option></select><span></span></div>
+  <div class="setRow"><label for="sModels">캐릭터 모델</label><select id="sModels" style="font-family:inherit;font-size:14px;border:2px solid var(--ink);border-radius:8px;padding:3px"><option value="real">진짜 · 성격마다 다른 몸·모자·말</option><option value="simple">도형 · 가볍게</option></select><span></span></div>
   <div class="note">설정은 이 브라우저에만 저장됩니다.</div>
   <div class="btnRow"><button id="setDone" class="primary">닫기</button></div>
 </div></section>
