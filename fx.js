@@ -156,8 +156,10 @@ export function createFx(scene) {
       for (let i = texts.length - 1; i >= 0; i--) {
         const t = texts[i]; t.life += dt; const k = t.life / t.max;
         if (k >= 1) { scene.remove(t.s); t.s.material.dispose(); texts.splice(i, 1); continue; }
-        t.s.position.y += dt * 0.9; const s = t.size * (k < 0.15 ? 0.6 + k / 0.15 * 0.6 : 1.2 - (k - 0.15) * 0.3);
-        t.s.scale.set(s, s / 2, 1); t.s.material.opacity = k > 0.7 ? (1 - k) / 0.3 : 1;
+        t.s.position.y += dt * 0.9; let s = t.size * (k < 0.15 ? 0.6 + k / 0.15 * 0.6 : 1.2 - (k - 0.15) * 0.3);
+        // 카메라가 아주 가까우면(자유 시점·낙마 직후) 글자가 화면을 덮는다 → 화면 키가 일정 비율을 넘지 않게 줄이고, 코앞이면 흐리게
+        const dc = camPos ? camPos.distanceTo(t.s.position) : 99; s = Math.min(s, Math.max(0.12, dc * 0.45));
+        t.s.scale.set(s, s / 2, 1); t.s.material.opacity = (k > 0.7 ? (1 - k) / 0.3 : 1) * Math.min(1, Math.max(0, (dc - 0.4) / 0.8));
       }
       for (let i = flying.length - 1; i >= 0; i--) {
         const f = flying[i]; f.life += dt;
