@@ -134,7 +134,7 @@ const PERSONA_TXT = {
   rival: '네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.',
   still: '가만히 있는 연습 과녁.',
 };
-const VERSION = 'v0.4b';   // 시험 기록에 같이 적는다
+const VERSION = 'v0.5.1';   // 시험 기록에 같이 적는다
 // 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
 let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };

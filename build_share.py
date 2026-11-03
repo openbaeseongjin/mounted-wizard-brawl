@@ -4,7 +4,7 @@
 import os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
+ROOT = os.path.abspath(os.environ.get('MW_ROOT') or os.path.join(HERE, '..', '..'))   # MW_ROOT 로 출력 위치를 바꿀 수 있다 (시험용)
 read = lambda *p: open(os.path.join(HERE, *p), encoding='utf-8').read()
 
 # 의존 순서 (앞 모듈이 뒤 모듈을 쓰지 않게)
@@ -25,12 +25,24 @@ for k, name in enumerate(ORDER + ['main']):
         assert dep[1] in ORDER[:k], f'{name}.js가 쓰는 {dep[1]}.js가 ORDER에 없거나 뒤에 있다'
 
 parts = []
+EXPORTS = {}
 for name in ORDER:
     body = convert(read(name + '.js'))
     names = re.findall(r'^export (?:async )?(?:function|const|let|class) (\w+)', body, re.M)
+    # `export { a, b };` 재수출 줄(gauntlet.js의 slotsFor 등)도 이름에 넣고 줄은 지운다. 빠뜨리면 묶음에서 그 이름이 사라진다
+    for grp in re.findall(r'^export \{([^}]*)\};?[ \t]*$', body, re.M):
+        names += [n.strip() for n in grp.split(',') if n.strip()]
+    body = re.sub(r'^export \{[^}]*\};?[ \t]*$', '', body, flags=re.M)
     body = re.sub(r'^export ', '', body, flags=re.M)
     assert 'export ' not in re.sub(r'//.*', '', body), name
+    EXPORTS[name] = set(names)
     parts.append(f"// ----- {name}.js -----\nconst __{name} = (() => {{\n{body}\nreturn {{ {', '.join(names)} }};\n}})();\n")
+# 가져오는 이름이 그 모듈의 묶음 반환값에 실제로 있는지 (slotsFor 재수출 누락 같은 것을 빌드에서 잡는다)
+for name in ORDER + ['main']:
+    for names_s, dep in OURS.findall(read(name + '.js')):
+        miss = [n.strip().split(' as ')[0].strip() for n in names_s.split(',') if n.strip()]
+        miss = [n for n in miss if n not in EXPORTS[dep]]
+        assert not miss, f'{name}.js가 {dep}.js에서 가져오는 {miss}가 묶음에 없다 (export 형식 확인)'
 main = convert(read('main.js'))
 bundle = THREE + '\n' + '\n'.join(parts) + '// ----- main.js -----\n' + main
 
