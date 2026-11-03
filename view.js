@@ -96,7 +96,10 @@ export function buildVisuals(scene, m) {
 export function disposeVisuals(scene, vis) {
   if (!vis) return;
   scene.remove(vis.group);
-  vis.group.traverse((o) => { if (o.geometry && !o.userData.rig) o.geometry.dispose(); });   // 진짜 모델 메시는 원본과 모양을 같이 쓴다 → 버리지 않는다
+  vis.group.traverse((o) => {
+    if (o.geometry && !o.userData.rig) o.geometry.dispose();   // 진짜 모델 메시는 원본과 모양을 같이 쓴다 → 버리지 않는다
+    if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();   // 시합마다 복제한 뼈대의 뼈 텍스처(시합당 약 56개)가 남아 쌓이던 것 (QA: 12판 연속 시 87→710개)
+  });
 }
 
 // ---------- 그리기 ----------
