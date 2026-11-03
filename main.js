@@ -36,7 +36,19 @@ catch (e) { $('boot').textContent = '물리 엔진(Rapier)을 못 불러왔어�
 const SET_KEY = 'mw-demo-settings-v1';
 const DEFAULTS = { sens: 1, swing: 1, fov: 76, sway: 1, vol: 0.85, inv: false, replay: true, shadow: 'high', orient: '', adv: false, gfx: 'high', models: 'real' };   // models: 캐릭터 모델 'real' 진짜(KayKit·Quaternius) · 'simple' 도형   // gfx: 화면 효과(postfx.js) 'high' 켬 · 'normal' 끔   // adv: 고급 조작(하프소드식). 기본은 쉬운 조작   // orient: 폰 화면 방향 ('' 아직 안 고름 · 'land' 가로 · 'port' 세로)
 let S = { ...DEFAULTS }, hadSettings = false, savedGfx = false;
-try { const s = localStorage.getItem(SET_KEY); if (s) { const o = JSON.parse(s); S = { ...DEFAULTS, ...o }; hadSettings = true; savedGfx = 'gfx' in o; } } catch (e) { /* 기본값 */ }
+// 저장된 설정이 깨졌거나 범위 밖이면 그 칸만 기본값으로 (소리 크기가 글자면 오디오가 죽던 것을 막는다)
+const numIn = (v, lo, hi, d) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+const pick = (v, list, d) => (list.includes(v) ? v : d);
+function cleanSettings(o) {
+  const r = {};
+  r.sens = numIn(o.sens, 0.3, 3, DEFAULTS.sens); r.swing = numIn(o.swing, 0.3, 3, DEFAULTS.swing); r.fov = numIn(o.fov, 60, 100, DEFAULTS.fov);
+  r.sway = numIn(o.sway, 0, 1.5, DEFAULTS.sway); r.vol = numIn(o.vol, 0, 1, DEFAULTS.vol);
+  for (const k of ['inv', 'replay', 'adv']) r[k] = typeof o[k] === 'boolean' ? o[k] : DEFAULTS[k];
+  r.shadow = pick(o.shadow, ['high', 'low', 'off'], DEFAULTS.shadow); r.gfx = pick(o.gfx, ['high', 'normal'], DEFAULTS.gfx);
+  r.models = pick(o.models, ['real', 'simple'], DEFAULTS.models); r.orient = pick(o.orient, ['', 'land', 'port'], DEFAULTS.orient);
+  return r;
+}
+try { const s = localStorage.getItem(SET_KEY); if (s) { const o = JSON.parse(s); if (o && typeof o === 'object' && !Array.isArray(o)) { S = { ...DEFAULTS, ...cleanSettings(o) }; hadSettings = true; savedGfx = pick(o.gfx, ['high', 'normal'], null) !== null; } } } catch (e) { /* 기본값 */ }
 function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(S)); } catch (e) { /* 저장 못 해도 계속 */ } }
 
 // ---------- 렌더러 ----------

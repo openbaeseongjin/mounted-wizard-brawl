@@ -10,12 +10,24 @@ export function newCareer() {
     job: null, jobTier: 0, trials: {},   // 전직: 원소, 단계(0 견습 · 1 · 2), 시험별 시도 수
   };
 }
-// 옛 저장(v0.3b 이전): 전직 필드를 채운다
+// 옛 저장(v0.3b 이전): 전직 필드를 채운다. 저장값이 깨졌거나(손으로 고침·다른 버전) 모르는 값이면 그 칸만 기본으로 되돌린다
+// (모르는 장비 id·글자 숫자·null 목록 때문에 마구간 화면이 안 열리던 것을 막는다)
 export function normalizeCareer(c) {
-  if (!c) return newCareer();
-  if (c.job === undefined) c.job = null;
-  if (c.jobTier === undefined) c.jobTier = 0;
-  if (!c.trials) c.trials = {};
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return newCareer();
+  const base = newCareer();
+  const num = (v, d, hi = 1e9) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(0, Math.floor(v))) : d);
+  for (const k of ['points', 'gold', 'wins', 'losses', 'fearN', 'casts', 'swings']) c[k] = num(c[k], base[k]);
+  for (const k of ['fearSum', 'chargeSum', 'time']) c[k] = typeof c[k] === 'number' && Number.isFinite(c[k]) && c[k] >= 0 ? c[k] : 0;
+  c.rank = num(c.rank, 0, RANK_NAMES.length - 1); c.fightIdx = num(c.fightIdx, 0, 1e6);
+  c.champion = !!c.champion; c.ending = c.ending === 'pair' || c.ending === 'debt' ? c.ending : null;
+  const ld = c.loadout && typeof c.loadout === 'object' && !Array.isArray(c.loadout) ? c.loadout : {};
+  c.loadout = {}; for (const slot of Object.keys(STARTER)) c.loadout[slot] = ITEMS[ld[slot]] && ITEMS[ld[slot]].slot === slot ? ld[slot] : STARTER[slot];
+  const inv = Array.isArray(c.inventory) ? c.inventory.filter((id) => ITEMS[id]) : [];
+  c.inventory = [...new Set([...inv, ...Object.values(c.loadout)])];   // 들고 있는 장비는 늘 가진 것
+  if (!Array.isArray(c.log)) c.log = [];
+  c.job = JOBS[c.job] ? c.job : null;
+  c.jobTier = c.job ? Math.min(2, num(c.jobTier, 0)) : 0;
+  if (!c.trials || typeof c.trials !== 'object' || Array.isArray(c.trials)) c.trials = {};
   return c;
 }
 // 전직 제안: 첫 승리 뒤 1차, 랭크 결정전 승리 뒤 2차

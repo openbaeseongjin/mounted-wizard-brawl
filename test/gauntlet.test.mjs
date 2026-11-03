@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newCareer, currentFights, applyResult, lootOptions, takeLoot, buy, equip, tierSum, rivalMimic, buildRoster, jobOffer, chooseJob, passTrial, failTrial, normalizeCareer, slotsFor } from '../gauntlet.js';
-import { LADDER } from '../config.js';
+import { LADDER, ITEMS, JOBS } from '../config.js';
 
 const stats = (o = {}) => ({ unhorsed: 0, kos: 0, deflectHits: 0, hits: 0, casts: 0, chargeSum: 0, swings: 0, fearSum: 0, fearN: 0, ...o });
 function result({ won, reason = won ? 'last' : 'ko', me = {}, opp = [] }) {
@@ -119,4 +119,13 @@ test('명단: 내 슬롯, AI 원소, f4 번개 2차, 세린은 내 원소', () =
   const bg = r4.find((x) => x.char === 'beongae'); assert.deepEqual(bg.slots, { main: 'fireball', big: 'firetrail' });
   const fin = buildRoster(c, LADDER[1].boss); assert.equal(fin[1].job, 'water'); assert.deepEqual(fin[1].slots, { main: 'whip', big: 'ice' });
   assert.deepEqual(slotsFor('fire', 1), { main: 'fireball', big: null });
+});
+
+test('깨진 저장값은 그 칸만 기본으로 되돌린다 (마구간 화면이 안 열리던 것)', () => {
+  const ok = (c) => { assert.ok(c.log instanceof Array); assert.ok(Number.isFinite(c.points) && Number.isFinite(c.gold) && c.rank >= 0 && c.rank <= 2); for (const [slot, id] of Object.entries(c.loadout)) assert.equal(ITEMS[id].slot, slot); assert.ok(c.inventory.every((id) => ITEMS[id])); assert.ok(c.inventory.includes(c.loadout.staff)); assert.ok(c.job === null || JOBS[c.job]); assert.ok(c.jobTier >= 0 && c.jobTier <= 2); assert.equal(typeof c.trials, 'object'); currentFights(c); };
+  for (const bad of [null, undefined, 5, 'x', [], {}, { loadout: null, inventory: 5, log: null }, { loadout: { staff: 'zzz', hat: 'stick', robe: 3, gear: undefined }, rank: 'x', points: 'abc', gold: null, fightIdx: -3, job: 'zzz', jobTier: 7, trials: [] },
+    { rank: 99, points: 1e15, gold: Infinity, fightIdx: 1e12, job: 'fire', jobTier: 9 }]) ok(normalizeCareer(bad));
+  const good = newCareer(); good.gold = 77; good.job = 'water'; good.jobTier = 2; good.rank = 1; good.loadout.staff = 'crystal'; good.inventory = ['stick', 'crystal'];
+  const g2 = normalizeCareer(JSON.parse(JSON.stringify(good)));
+  assert.equal(g2.gold, 77); assert.equal(g2.job, 'water'); assert.equal(g2.jobTier, 2); assert.equal(g2.rank, 1); assert.equal(g2.loadout.staff, 'crystal');
 });

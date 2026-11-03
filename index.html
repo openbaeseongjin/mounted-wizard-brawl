@@ -437,6 +437,10 @@ body.simple #touch #tbDuck{right:30px;bottom:136px;width:64px;height:64px;font-s
 </div>
 <div id="boot">마구간 문을 여는 중…</div>
 <div id="error"></div>
+<script>
+// v0.5.1 QA: three.js·글꼴 CDN이 막혀 모듈이 못 뜨면 「여는 중…」만 영원히 보이던 것 → 20초 뒤 안내 (게임이 뜨면 이 문구는 사라진다)
+setTimeout(function () { var b = document.getElementById('boot'); if (b && !b.classList.contains('hidden') && !window.__mw && b.textContent.indexOf('물리 엔진') < 0) b.innerHTML = '아직 불러오는 중이에요… 계속 이 화면이면 인터넷 연결을 확인하고 새로고침해 주세요<br><small style="font-size:14px;opacity:.8">Still loading. If this stays, check your internet connection (three.js / physics engine load from a CDN) and reload.</small>'; }, 20000);
+</script>
 <script type="module" src="./main.js"></script>
 </body>
 </html>
