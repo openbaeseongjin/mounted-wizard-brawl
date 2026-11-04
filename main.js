@@ -59,7 +59,8 @@ const lowQ = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, inn
 if (lowQ && !hadSettings) S.shadow = 'low';
 if (!savedGfx) S.gfx = lowQ ? 'normal' : 'high';   // 화면 효과는 처음에 PC 켬 · 폰 끔 (예전 설정이 있어도 이 항목은 새로 정한다)
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, lowQ ? 1.5 : 2));
+const BASE_PR = Math.min(devicePixelRatio, lowQ ? 1.5 : 2);
+renderer.setPixelRatio(BASE_PR);
 renderer.shadowMap.enabled = S.shadow !== 'off'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
 const scene = new THREE.Scene();
@@ -74,7 +75,7 @@ const LOOK = new URLSearchParams(location.search).get('look');
 const look = LOOK ? await (await import('./lookPreview.js')).createLook({ renderer, scene, camera, mode: LOOK,
   get: { vis: () => vis, frame: () => curF, match: () => match, player: () => (player ? player.i : -1), view: () => view } }) : null;
 // 화면 효과 (postfx.js): 켤 때 한 번 만든다. 못 만들면(인터넷·WebGL2 없음) 끈다
-let post = null, postBusy = false, gfxEma = 1 / 60, gfxT = 0;
+let post = null, postBusy = false;
 function applyGfx() {
   if (look || S.gfx !== 'high' || post || postBusy) return;
   if (!renderer.capabilities.isWebGL2) { S.gfx = 'normal'; return; }
@@ -106,7 +107,73 @@ function rigNow() {
   if (!vis.rig) rig.attach(vis, match);
   return rig;
 }
-const draw = () => { if (look) look.render(); else if (post && S.gfx === 'high') post.render(); else renderer.render(scene, camera); };
+// ---------- 적응형 화질 (그리는 방식만 바꾼다. 시뮬은 그대로) ----------
+// 다른 게임·무거운 프로그램이 GPU를 나눠 쓰면 프레임이 늘어지거나 가끔 크게 멎는다. 느리면 층계를 한 칸씩 내려간다:
+// 그림자 갱신 절반 → 그림자 깊이(AO) 끄기 → 해상도 → 화면 효과 끄기 → 해상도 더. 값싼 것(해상도를 안 바꾸는 것)부터 쓴다:
+// 해상도를 바꾸면 렌더 타깃을 다시 만들어 한두 프레임 멎는다. 여유가 있어 보이면 천천히 한 칸씩 되돌린다
+// (올려 봤다가 느리면 바로 내리고 다음 시도를 늦춘다). 아주 느리면 두 칸씩 내린다. 주소에 ?gov=0 이면 끈다
+// sh2: 그림자 맵을 두 프레임에 한 번만 다시 그린다 (움직이는 그림자가 한 프레임 늦을 뿐 눈에 거의 안 띈다)
+const GOV_LEVELS = [
+  { pr: 1, ao: true, post: true, sh2: false }, { pr: 1, ao: true, post: true, sh2: true }, { pr: 1, ao: false, post: true, sh2: true },
+  { pr: 0.85, ao: false, post: true, sh2: true }, { pr: 0.85, ao: false, post: false, sh2: true }, { pr: 0.72, ao: false, post: false, sh2: true }, { pr: 0.6, ao: false, post: false, sh2: true }];
+const PERF = new URLSearchParams(location.search).get('perf') === '1';
+const gov = { on: new URLSearchParams(location.search).get('gov') !== '0', level: 0, ema: 1 / 60, bad: 0, huge: 0, hold: -4, settle: 0, slowT: 0, fastT: 0, upWait: 20, hist: [], tried: false, ao: true, post: true, sh2: false, cpuMs: 0, drawMs: 0 };
+function govApply() {
+  const g = GOV_LEVELS[gov.level], pr = Math.max(0.6, BASE_PR * g.pr);
+  if (Math.abs(renderer.getPixelRatio() - pr) > 0.01) renderer.setPixelRatio(pr);
+  gov.ao = g.ao; gov.post = g.post; gov.sh2 = g.sh2;
+  if (!g.sh2) renderer.shadowMap.autoUpdate = true;
+}
+function govStep(to, tried) {
+  gov.level = Math.max(0, Math.min(GOV_LEVELS.length - 1, to)); gov.tried = tried;
+  gov.hold = 0; gov.slowT = 0; gov.fastT = 0; gov.ema = 1 / 60; gov.bad = 0; gov.huge = 0; gov.settle = 0.7; govApply();
+  if (gov.hist.length < 60) gov.hist.push(Math.round(performance.now() / 100) / 10 + ':' + gov.level + (tried ? 'u' : ''));   // 시험·디버그용 기록
+}
+function govTick(dt) {
+  if (!gov.on || document.hidden) return;
+  const d = Math.min(dt, 0.05);
+  gov.hold += d;
+  if (gov.settle > 0) { gov.settle -= d; return; }   // 바꾼 직후 한두 프레임 멎는 구간은 평균에 넣지 않는다
+  gov.ema += (d - gov.ema) * 0.06;
+  gov.bad += ((d > 0.026 ? 1 : 0) - gov.bad) * 0.012;   // 38fps 아래로 떨어진 프레임의 비율: 평균은 괜찮아도 가끔 크게 멎는 것을 잡는다
+  gov.huge += ((d >= 0.045 ? 1 : 0) - gov.huge) * 0.012;   // 0.05초 넘게 멎은 프레임의 비율
+  if (gov.hold < 2) return;
+  if (gov.huge > 0.012 && gov.level < 4 && !gov.tried) { gov.slowT += d; if (gov.slowT >= 0.5) { govStep(4, false); return; } }   // 크게 멎는 일이 잦으면 화면 효과부터 끈다 (가장 값비싼 전환이라 가장 잘 듣는다)
+  if (gov.ema > 0.0215 || gov.bad > 0.02) {   // 46fps 아래거나 느린 프레임이 2% 넘게 (5% 만 100ms 씩 멎어도 0.25초마다 끊긴다)
+    gov.slowT += d; gov.fastT = 0;
+    if (gov.slowT >= 0.8) {
+      if (gov.tried) { gov.upWait = Math.min(120, gov.upWait * 2); govStep(gov.level + 1, false); }   // 올려 봤더니 느리다: 되돌리고 다음 시도를 늦춘다
+      else if (gov.level < GOV_LEVELS.length - 1) govStep(gov.level + (gov.ema > 0.03 || gov.bad > 0.12 ? 2 : 1), false);
+      else gov.slowT = 0;
+    }
+  } else {
+    gov.slowT = Math.max(0, gov.slowT - d * 0.5);   // 한 번 괜찮았다고 바로 지우지 않는다: 군데군데 멎는 경우를 놓치지 않게 천천히 줄인다
+    if (gov.tried && gov.hold > 4) { gov.tried = false; gov.upWait = Math.max(20, gov.upWait * 0.5); }   // 올린 자리가 버틴다
+    if (gov.level > 0 && gov.ema < 0.0178 && gov.bad < 0.004) {
+      gov.fastT += d;
+      if (gov.fastT >= gov.upWait) govStep(gov.level - 1, true);
+    } else gov.fastT = 0;
+  }
+}
+let perfEl = null, perfAcc = 0, perfN = 0;
+function perfHud(dt) {
+  if (!PERF) return;
+  if (!perfEl) { perfEl = document.createElement('div'); perfEl.style.cssText = 'position:fixed;left:6px;bottom:6px;z-index:99999;font:12px/1.3 monospace;color:#9f9;background:rgba(0,0,0,.6);padding:3px 6px;pointer-events:none;white-space:pre'; document.body.appendChild(perfEl); }
+  perfAcc += dt; perfN++;
+  if (perfAcc > 0.5) {
+    perfEl.textContent = `${(perfN / perfAcc).toFixed(0)} fps · ${(perfAcc / perfN * 1000).toFixed(1)} ms · cpu ${gov.cpuMs.toFixed(1)} ms\nlevel ${gov.level} · pr ${renderer.getPixelRatio().toFixed(2)} · ao ${gov.ao ? 1 : 0} · post ${post && S.gfx === 'high' && gov.post ? 1 : 0}`;
+    perfAcc = 0; perfN = 0;
+  }
+}
+let shK = 0;
+const draw = () => {
+  const t1 = performance.now();
+  if (gov.sh2) { renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = (shK++ & 1) === 0; }
+  if (look) look.render();
+  else if (post && S.gfx === 'high' && gov.post) { post.ao.enabled = gov.ao; post.render(); }
+  else renderer.render(scene, camera);
+  gov.drawMs += (performance.now() - t1 - gov.drawMs) * 0.05;
+};
 audio.setVolume(S.vol);
 function applyShadow() {
   renderer.shadowMap.enabled = S.shadow !== 'off';
@@ -148,7 +215,7 @@ const PERSONA_TXT = {
   rival: L('네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.', 'Copies your casting and swinging habits. Thrusts with a lance and can grab.'),
   still: L('가만히 있는 연습 과녁.', 'A practice target that stands still.'),
 };
-const VERSION = 'v0.5.2';   // 시험 기록에 같이 적는다
+const VERSION = 'v0.5.3';   // 시험 기록에 같이 적는다
 // 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
 let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };
@@ -1100,15 +1167,25 @@ function vfxCtx(F) {
   return { fighterPos: fighterPosOf(F), jobOf: (i) => (match && match.fighters[i] ? match.fighters[i].job : null), spellVel: (id) => { const s = F.spells.find((x) => x.id === id); return s ? s.vel : null; },
     count: F.fighters.length, player: player ? player.i : -1, view, camPos: camera.position };
 }
+// 화면 주사율이 높으면(120·144·165Hz) 주사율만큼 그리지 않고 대략 60~80fps로 묶는다: 같은 PC에서 도는 다른 게임과 GPU를 덜 다툰다.
+// 시뮬은 고정 간격 누적(acc)이라 건너뛴 프레임의 시간이 다음 프레임 dt 에 그대로 들어가 속도는 같다
+let lastRaf = 0, vEst = 1000 / 60, lastRun = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  const raw = now - lastRaf; lastRaf = now;
+  vEst = Math.min(raw > 3 ? raw : vEst, vEst * 1.003);   // 모니터 한 칸 시간: 최근 가장 빠른 간격 (느려져도 천천히만 늘어난다)
+  const n = Math.max(1, Math.round(1000 / 75 / vEst));
+  if (n >= 2 && now - lastRun < (n - 0.4) * vEst) return;
+  lastRun = now;
+  const t0 = performance.now();
+  frameBody(now);
+  gov.cpuMs += (performance.now() - t0 - gov.cpuMs) * 0.05;
+}
+function frameBody(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; lastDt = dt;
+  if (window.__drawLog) window.__drawLog.push(dt * 1000);   // 시험용 (?perf=1): 실제로 그린 프레임 간격
+  govTick(dt); perfHud(dt);
   if (mode === 'fight' && player && tst && !replay && !paused) { tst.n++; tst.sum += dt; if (dt > 0.025) tst.slow++; }
-  // 화면 효과를 켰는데 시합 중에 3초 넘게 느리면(평균 28ms, 약 35fps 아래) 끄고 알린다
-  if (post && S.gfx === 'high' && mode === 'fight' && !paused && !replay) {
-    gfxEma += (dt - gfxEma) * 0.02; gfxT += dt;
-    if (gfxT > 3 && gfxEma > 0.028) { S.gfx = 'normal'; saveSettings(); hud.toast(L('화면이 느려서 「화면 효과」를 껐어요 · 설정에서 다시 켤 수 있어요', 'The screen was slow, so “Effects” was turned off · you can turn it back on in Settings'), 3.5, 'gfx'); }
-  } else { gfxEma = 1 / 60; gfxT = 0; }
   const t = now / 1000;
   replayCd = Math.max(0, replayCd - dt);
   for (let k = bumpsGrowing.length - 1; k >= 0; k--) { const b = bumpsGrowing[k]; b.scale.multiplyScalar(1 + dt * 6); if (b.scale.x >= 1) { b.scale.setScalar(1); bumpsGrowing.splice(k, 1); } }
@@ -1224,6 +1301,8 @@ window.__mw = {
   ko(i) { knockOut(match, match.fighters[i], player ? player.i : 0); },   // 시험용: 한 명만 기절 (시합이 안 끝나게)
   replayNow(focus = 1) { startReplay(focus, match.tick); },
   freeze(on) { paused = on; },   // 화면 비교용: 일시정지 화면 없이 시뮬만 멈춘다
+  govLevel(l) { gov.on = false; govStep(l, false); },   // 시험용: 화질 층계를 고정한다
+  get gov() { return gov; }, get perf() { return { level: gov.level, ema: +(gov.ema * 1000).toFixed(1), bad: +gov.bad.toFixed(3), cpu: +gov.cpuMs.toFixed(1), draw: +gov.drawMs.toFixed(1), vEst: +vEst.toFixed(2), pr: +renderer.getPixelRatio().toFixed(2), hist: gov.hist.join(' ') }; },
   get look() { return look; }, get rig() { return rig; }, get venues() { return venues; }, get vis() { return vis; }, get post() { return post && S.gfx === 'high' ? post : null; }, renderer,
   input: (patch) => Object.assign(ctl, patch),
   hud, fx, camera, THREE, ctl, input, audio, settings: S, vp, setOrient, magicView, scene, elemFx,
@@ -1235,3 +1314,4 @@ show('title');
 startMatch(null, 'attract');
 mode = 'attract';
 requestAnimationFrame(frame);
+

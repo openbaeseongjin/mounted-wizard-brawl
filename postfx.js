@@ -38,7 +38,7 @@ export async function createPostFx({ renderer, scene, camera }) {
     import(JSM + 'postprocessing/UnrealBloomPass.js'), import(JSM + 'postprocessing/ShaderPass.js'),
   ]);
   const size = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
-  let W = size.x, H = size.y;
+  let W = size.x, H = size.y, PR = pr;
   const rt = new THREE.WebGLRenderTarget(W * pr, H * pr, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, rt);
   // 장면은 readBuffer(= renderTarget2)에 그려진다. 패스마다 읽기·쓰기 버퍼를 바꾸는데 한 프레임에 2번(GTAO·마무리)이라
@@ -65,7 +65,8 @@ export async function createPostFx({ renderer, scene, camera }) {
 
   function render() {
     const s = renderer.getSize(new THREE.Vector2());
-    if (s.x !== W || s.y !== H) { W = s.x; H = s.y; const p = renderer.getPixelRatio(); composer.setSize(W, H); ao.setSize(W * p, H * p); bloom.setSize(W * p, H * p); }
+    const pNow = renderer.getPixelRatio();   // 적응형 화질(main.js)이 해상도 배율을 바꾸면 타깃도 같이 바꾼다
+    if (s.x !== W || s.y !== H || pNow !== PR) { W = s.x; H = s.y; PR = pNow; composer.setPixelRatio(pNow); composer.setSize(W, H); ao.setSize(W * pNow, H * pNow); bloom.setSize(W * pNow, H * pNow); }
     finalMat.uniforms.toneMappingExposure.value = renderer.toneMappingExposure;
     over.length = 0; occ.length = 0;
     const cx = camera.position.x, cz = camera.position.z;
@@ -79,6 +80,7 @@ export async function createPostFx({ renderer, scene, camera }) {
         if (dx * dx + dz * dz < OCC_RANGE * OCC_RANGE || !bs || bs.radius > 30) { occ.push(o); o.layers.enable(OCC_LAYER); }
       }
     });
+    if (composer.readBuffer !== composer.renderTarget2) composer.swapBuffers();   // 장면은 늘 깊이 텍스처를 단 renderTarget2 에 그린다 (AO 패스를 끄면 패스마다 바꾸는 횟수가 홀수가 된다)
     composer.render();
     // 효과: 가까운 물체 깊이만 먼저 그리고(말 뒤 불꽃이 가려지게), 그 위에 원래 방식(톤 매핑·sRGB)으로
     const camMask = camera.layers.mask, auto = renderer.autoClear;
