@@ -138,7 +138,7 @@ function govTick(dt) {
   gov.bad += ((d > 0.026 ? 1 : 0) - gov.bad) * 0.012;   // 38fps 아래로 떨어진 프레임의 비율: 평균은 괜찮아도 가끔 크게 멎는 것을 잡는다
   gov.huge += ((d >= 0.045 ? 1 : 0) - gov.huge) * 0.012;   // 0.05초 넘게 멎은 프레임의 비율
   if (gov.hold < 2) return;
-  if (gov.huge > 0.012 && gov.level < 4 && !gov.tried) { gov.slowT += d; if (gov.slowT >= 0.5) { govStep(4, false); return; } }   // 크게 멎는 일이 잦으면 화면 효과부터 끈다 (가장 값비싼 전환이라 가장 잘 듣는다)
+  if (gov.huge > 0.02 && gov.level < 4 && !gov.tried) { gov.slowT += d; if (gov.slowT >= 1) { govStep(4, false); return; } }   // 크게 멎는 일이 잦으면(시합 시작·첫 마법 컴파일 같은 한두 번이 아니라 계속) 화면 효과부터 끈다 (가장 값비싼 전환이라 가장 잘 듣는다)
   if (gov.ema > 0.0215 || gov.bad > 0.02) {   // 46fps 아래거나 느린 프레임이 2% 넘게 (5% 만 100ms 씩 멎어도 0.25초마다 끊긴다)
     gov.slowT += d; gov.fastT = 0;
     if (gov.slowT >= 0.8) {
