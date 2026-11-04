@@ -4,9 +4,11 @@ import * as THREE from 'three';
 import { CFG } from './config.js';
 import { toon } from './models.js';
 import { createKit } from './fxKit.js';
+import { LANG } from './i18n.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const WORD = { 화르륵: '#ff8a3a', 철썩: '#7fd0ff', 휘잉: '#bff5dc', 쿵: '#e0b070', 쭈욱: '#dff4ff', 치익: '#ffffff' };
+const WORD_EN = { 화르륵: 'Whoomph', 철썩: 'Splash', 휘잉: 'Whoosh', 쿵: 'Thud', 쭈욱: 'Zip', 치익: 'Hiss' };   // 키는 한국어 표지, 보이는 글자만 영어로
 const C = { dust: 0xf0dfb8, dirt: 0x8a6236, smoke: 0x8a8079, steam: 0xf4f8fa, fireA: 0xffb030, fireB: 0xff7a1a, fireC: 0xffe070, rock: 0x8a7a68, wallRock: 0x9a7448, ice: 0xdff4ff, mint: 0xbff5dc };
 const TAIL = [[0, [1, 0.92, 0.5]], [0.25, [1, 0.6, 0.15]], [0.55, [0.88, 0.25, 0.08]], [0.8, [0.36, 0.31, 0.28]], [1, [0.3, 0.27, 0.25]]];
 function tailColor(u, o) { let k = 1; while (k < TAIL.length - 1 && TAIL[k][0] < u) k++; const [ua, a] = TAIL[k - 1], [ub, b] = TAIL[k], f = Math.min(1, (u - ua) / (ub - ua)); for (let j = 0; j < 3; j++) o[j] = a[j] + (b[j] - a[j]) * f; o[3] = 0.95 * (1 - u); return o; }
@@ -23,7 +25,7 @@ export function createElemFx(scene, { fx = null, camera = null, low = false, ran
     if (!fx) return;
     const g = gates.get(key); if (g !== undefined && clock - g < 0.4) return; gates.set(key, clock);
     const d = ctx && ctx.camPos ? ctx.camPos.distanceTo(P) : 9;
-    fx.pop(text + '!', P, WORD[text], 1.3 * Math.min(3.2, Math.max(1, d / 9)));
+    fx.pop((LANG === 'en' ? WORD_EN[text] || text : text) + '!', P, WORD[text], 1.3 * Math.min(3.2, Math.max(1, d / 9)));
   }
   // ---------- 재료 조합 ----------
   function droplets(P, n, speed = 4, up = 2) { for (let k = 0; k < N(n); k++) { const a = R(0, 6.28); kit.chunk('drop', P, { v: outward(a, R(speed * 0.4, speed), R(up * 0.5, up * 1.5)), size: R(0.035, 0.06), life: R(0.5, 0.8), g: -12, bounce: 0.1 }); } }

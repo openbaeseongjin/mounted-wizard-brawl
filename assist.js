@@ -33,7 +33,7 @@ export function createAssist(m, i) {
     target: -1, swingT: -1, side: 1, hy: 0, dur: 0.18, wind: 0.12, arming: false, thrustT: 0, couch: false,
     prev: { cast: false, swing: false, dodge: false, big: false }, flip: false, aimT: { main: 0, big: 0 },
     look: null,   // 버튼을 누르는 동안 보기를 이쪽으로 돌린다 [몸/말 기준 요, 피치]
-    ui: { target: -1, mode: 'idle', prog: 0, gold: false, swingLabel: '휘두르기', castOk: true, dodgeLabel: '숙이기', aim: null, slot: 'main', castLabel: '마력탄', bigLabel: '', bigOk: false },
+    ui: { target: -1, mode: 'idle', prog: 0, gold: false, swingLabel: '휘두르기', castOk: true, dodgeLabel: '숙이기', aim: null, slot: 'main', castLabel: SPELLS.orb.name, bigLabel: '', bigOk: false },
   };
   const pos = (g) => g.rider.body.translation();
   const vel = (g) => (g.horse >= 0 ? m.horses[g.horse].body.linvel() : g.rider.body.linvel());

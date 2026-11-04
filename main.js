@@ -21,16 +21,18 @@ import { createPostFx } from './postfx.js';
 import { loadRigAssets } from './assets.js';
 import { createRig } from './rigModels.js';
 import { createVenues, venueFor } from './venues.js';
+import { L, LANG, setLang, applyDom } from './i18n.js';
 
 const RAPIER_URL = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/+esm';
 const $ = (id) => document.getElementById(id);
+applyDom();   // index.html 의 data-en 글자를 영어로 (이미 했어도 안전: 원문은 data-ko 에 남아 있다)
 function showError(e) { const p = $('error'); p.textContent = String((e && e.stack) || e); p.classList.add('show'); }
 addEventListener('error', (e) => showError(e.error || e.message));
 addEventListener('unhandledrejection', (e) => showError(e.reason));
 
 let R;
 try { const mod = await import(RAPIER_URL); R = mod.default || mod; await R.init(); }
-catch (e) { $('boot').textContent = '물리 엔진(Rapier)을 못 불러왔어요 · 인터넷 연결을 확인해 주세요'; showError(e); throw e; }
+catch (e) { $('boot').textContent = L('물리 엔진(Rapier)을 못 불러왔어요 · 인터넷 연결을 확인해 주세요', 'Could not load the physics engine (Rapier) · please check your internet connection'); showError(e); throw e; }
 
 // ---------- 설정 (이 브라우저에만) ----------
 const SET_KEY = 'mw-demo-settings-v1';
@@ -134,19 +136,19 @@ career = normalizeCareer(career);   // 옛 저장은 견습으로 이어 간다
 function save() { try { localStorage.setItem(SAVE, JSON.stringify(career)); } catch (e) { /* 저장 못 해도 계속 */ } }
 
 // ---------- 공통 도우미 ----------
-const J = (w, pair) => { const c = w.charCodeAt(w.length - 1) - 0xac00; const has = c >= 0 && c % 28 !== 0; const [a, b] = pair.split('/'); return w + (has ? a : b); };
-const nameOf = (f) => (f.isPlayer ? '마지' : f.ch.name);
+const J = (w, pair) => { if (LANG === 'en') return w; const c = w.charCodeAt(w.length - 1) - 0xac00; const has = c >= 0 && c % 28 !== 0; const [a, b] = pair.split('/'); return w + (has ? a : b); };   // 영어에는 조사가 없다: 이름만
+const nameOf = (f) => (f.isPlayer ? L('마지', 'Maji') : f.ch.name);
 const colorName = (f) => `<b style="color:${f.ch.css}">${nameOf(f)}</b>`;
-const CJ = (f, pair) => colorName(f) + J(nameOf(f), pair).slice(nameOf(f).length);   // 색 이름 + 조사
+const CJ = (f, pair) => colorName(f) + (LANG === 'en' ? '' : J(nameOf(f), pair).slice(nameOf(f).length));   // 색 이름 + 조사
 const PERSONA_TXT = {
-  dummy: '일직선으로 왕복한다. 가끔 약하게 쏜다. 쳐내지 않는다.',
-  heavy: '가장 가까운 상대에게 정면 돌진하고 찌르기로 들이받는다. 한 방이 크고 선회가 느리다. → 옆으로 비껴 스치며 쳐라.',
-  quick: '빠르게 돌며 작게 자주 쏜다. 가끔 지팡이를 던진다. 쉽게 겁먹는다.',
-  sneaky: '둘이 붙을 때까지 가장자리를 돈다. 약한 상대를 노리고, 옆에 붙으면 잡아 끌어내린다.',
-  rival: '네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.',
-  still: '가만히 있는 연습 과녁.',
+  dummy: L('일직선으로 왕복한다. 가끔 약하게 쏜다. 쳐내지 않는다.', 'Shuttles back and forth in a straight line. Fires weakly now and then. Never parries.'),
+  heavy: L('가장 가까운 상대에게 정면 돌진하고 찌르기로 들이받는다. 한 방이 크고 선회가 느리다. → 옆으로 비껴 스치며 쳐라.', 'Charges the nearest rival head-on and rams with thrusts. Hits hard, turns slowly. → Slip past its side and strike.'),
+  quick: L('빠르게 돌며 작게 자주 쏜다. 가끔 지팡이를 던진다. 쉽게 겁먹는다.', 'Circles fast and fires small shots often. Sometimes throws its staff. Spooks easily.'),
+  sneaky: L('둘이 붙을 때까지 가장자리를 돈다. 약한 상대를 노리고, 옆에 붙으면 잡아 끌어내린다.', 'Circles the edge until two others clash. Targets the weak, and grabs and drags riders off when alongside.'),
+  rival: L('네가 쏘는 버릇과 휘두르는 버릇을 따라 한다. 마상창으로 찌르고 잡기도 한다.', 'Copies your casting and swinging habits. Thrusts with a lance and can grab.'),
+  still: L('가만히 있는 연습 과녁.', 'A practice target that stands still.'),
 };
-const VERSION = 'v0.5.1';   // 시험 기록에 같이 적는다
+const VERSION = 'v0.5.2';   // 시험 기록에 같이 적는다
 // 사람 시험용 기록 (시뮬과 무관, 화면 쪽에서만 센다): 시합이 끝나면 결과 화면에 한 줄로 보여 주고 복사하게 한다
 let tst = null;
 const VOICE = { maji: 1.35, dummy: 1.1, mukjik: 0.72, boss1: 0.66, beongae: 1.5, gihoe: 0.95, rival: 1.25 };
@@ -309,25 +311,28 @@ function readFrameInput(dt) {
 }
 function commonKeys(dt) {
   const p = player;
-  if (input.pressed('KeyV')) { view = view === 'fp' ? 'tp' : 'fp'; hud.toast(view === 'fp' ? '1인칭' : '3인칭', 1.2); }
+  if (input.pressed('KeyV')) { view = view === 'fp' ? 'tp' : 'fp'; hud.toast(view === 'fp' ? L('1인칭', 'First person') : L('3인칭', 'Third person'), 1.2); }
   if (input.pressed('KeyZ') && S.adv) {
     if (ctl.lock >= 0) ctl.lock = -1;
     else {   // 화면 정면에 가장 가까운 상대
       let best = -1, bs = -1e9; const me = p.rider.body.translation(), fw = V(Math.sin(p.aimYaw), 0, Math.cos(p.aimYaw));
       for (const g of match.fighters) { if (g === p || g.out) continue; const tp = g.rider.body.translation(), d = V(tp.x - me.x, 0, tp.z - me.z); const dl = d.length(); const s = d.normalize().dot(fw) * 2 - dl / 40; if (s > bs) { bs = s; best = g.i; } }
-      ctl.lock = best; if (best >= 0) hud.toast(`표적 고정: ${colorName(match.fighters[best])} (Z로 해제)`, 1.6);
+      ctl.lock = best; if (best >= 0) hud.toast(L(`표적 고정: ${colorName(match.fighters[best])} (Z로 해제)`, `Locked on: ${colorName(match.fighters[best])} (Z to release)`), 1.6);
     }
   }
-  if (input.pressed('KeyF')) { slowUser = !slowUser; hud.toast(slowUser ? '슬로모션 켬 (F)' : '슬로모션 끔', 1.2); }
+  if (input.pressed('KeyF')) { slowUser = !slowUser; hud.toast(slowUser ? L('슬로모션 켬 (F)', 'Slow motion on (F)') : L('슬로모션 끔', 'Slow motion off'), 1.2); }
   if (input.pressed('KeyH')) hud.toggleLegend();
   if (input.pressed('Escape')) pause(true);
   if (input.held('KeyG') && kind !== 'practice') { ctl.gHold += dt; if (ctl.gHold > 0.9 && !ctl.surrender) ctl.surrender = true; } else ctl.gHold = 0;
-  if (ctl.gHold > 0.1 && !ctl.surrender) hud.toast(`🏳 항복하려면 G를 계속 누르세요 (${Math.ceil((0.9 - ctl.gHold) * 10) / 10}초)`, 0.3, 'g');
+  if (ctl.gHold > 0.1 && !ctl.surrender) hud.toast(L(`🏳 항복하려면 G를 계속 누르세요 (${Math.ceil((0.9 - ctl.gHold) * 10) / 10}초)`, `🏳 Keep holding G to surrender (${Math.ceil((0.9 - ctl.gHold) * 10) / 10}s)`), 0.3, 'g');
 }
 // 쉬운 조작 ↔ 고급 조작: 터치 버튼 모양·PC 안내를 바꾼다
 const TB_DEFAULT = { tbSwing: $('tbSwing').innerHTML, tbCast: $('tbCast').innerHTML, tbDuck: $('tbDuck').innerHTML }, LEGEND_ADV = $('legend').innerHTML;
-const LEGEND_SIMPLE = '<kbd>W</kbd> 질주 <kbd>S</kbd> 감속 <kbd>A</kbd><kbd>D</kbd> 방향 (말은 저절로 달린다) · 마우스 = 보기<br><b>우클릭</b> 마법: 누르고 있다가 조준선이 금색일 때 떼기 · <kbd>Q</kbd> 큰 마법(2차 전직 뒤)<br><b>좌클릭</b> 휘두르기: 누르고 있으면 상대 옆으로 붙고, 금색일 때 떼기<br>(상황에 따라 쳐내기 · 줍기 · 타기 · 찌르기로 바뀜) · <kbd>Space</kbd> 피하기<br><kbd>V</kbd> 시점 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기 · 설정에서 고급 조작(하프소드식)';
+const LEGEND_SIMPLE = L('<kbd>W</kbd> 질주 <kbd>S</kbd> 감속 <kbd>A</kbd><kbd>D</kbd> 방향 (말은 저절로 달린다) · 마우스 = 보기<br><b>우클릭</b> 마법: 누르고 있다가 조준선이 금색일 때 떼기 · <kbd>Q</kbd> 큰 마법(2차 전직 뒤)<br><b>좌클릭</b> 휘두르기: 누르고 있으면 상대 옆으로 붙고, 금색일 때 떼기<br>(상황에 따라 쳐내기 · 줍기 · 타기 · 찌르기로 바뀜) · <kbd>Space</kbd> 피하기<br><kbd>V</kbd> 시점 <kbd>G</kbd> 항복(길게) <kbd>H</kbd> 숨기기 · 설정에서 고급 조작(하프소드식)',
+  '<kbd>W</kbd> gallop <kbd>S</kbd> slow <kbd>A</kbd><kbd>D</kbd> steer (the horse runs on its own) · mouse = look<br><b>Right-click</b> magic: hold, release when the reticle turns gold · <kbd>Q</kbd> big spell (after 2nd advancement)<br><b>Left-click</b> swing: hold to close in beside a rival, release on gold<br>(becomes parry · pick up · mount · thrust by context) · <kbd>Space</kbd> duck<br><kbd>V</kbd> view <kbd>G</kbd> surrender (hold) <kbd>H</kbd> hide · Advanced (Half Sword-style) controls in Settings');
 let lastLbl = '';
+const LBL_EN = { 휘두르기: 'Swing', 쳐내기: 'Parry', 줍기: 'Pick up', 타기: 'Mount', 찌르기: 'Thrust', 주먹: 'Fist', 숙이기: 'Duck', 발차기: 'Kick' };
+const lbl = (s) => (LANG === 'en' ? LBL_EN[s] || s : s);
 function applyControls() {
   document.body.classList.toggle('simple', !S.adv);
   hud.setLegend(S.adv ? LEGEND_ADV : LEGEND_SIMPLE);
@@ -335,16 +340,18 @@ function applyControls() {
 }
 function simpleButtons(ui) {
   if (!input.st.touch) return;
-  const sw = ui.mode === 'arm' && ui.gold ? '떼기!' : ui.swingLabel, ca = !ui.castOk ? '지팡이<br>없음' : ui.mode === 'charge' && ui.slot === 'main' && ui.gold ? '떼기!' : ui.castLabel;
-  const big = !ui.bigOk ? '' : ui.mode === 'charge' && ui.slot === 'big' && ui.gold ? '떼기!' : ui.bigLabel;
+  const REL = L('떼기!', 'Release!');   // assist.js 가 주는 버튼 이름은 한국어 표지: 보이는 글자만 여기서 바꾼다
+  const sw = ui.mode === 'arm' && ui.gold ? REL : lbl(ui.swingLabel), ca = !ui.castOk ? L('지팡이<br>없음', 'No<br>staff') : ui.mode === 'charge' && ui.slot === 'main' && ui.gold ? REL : ui.castLabel;
+  const big = !ui.bigOk ? '' : ui.mode === 'charge' && ui.slot === 'big' && ui.gold ? REL : ui.bigLabel;
   const key = sw + '|' + ca + '|' + ui.dodgeLabel + '|' + big;
   if (key === lastLbl) return;
   lastLbl = key;
-  $('tbSwing').innerHTML = sw; $('tbCast').innerHTML = ca; $('tbDuck').innerHTML = ui.dodgeLabel;
-  $('tbBig').classList.toggle('hidden', !ui.bigOk); $('tbBig').innerHTML = big; $('tbBig').classList.toggle('gold', big === '떼기!');
-  $('tbSwing').classList.toggle('gold', sw === '떼기!'); $('tbCast').classList.toggle('gold', ca === '떼기!'); $('tbCast').classList.toggle('off', !ui.castOk);
+  $('tbSwing').innerHTML = sw; $('tbCast').innerHTML = ca; $('tbDuck').innerHTML = lbl(ui.dodgeLabel);
+  $('tbBig').classList.toggle('hidden', !ui.bigOk); $('tbBig').innerHTML = big; $('tbBig').classList.toggle('gold', big === REL);
+  $('tbSwing').classList.toggle('gold', sw === REL); $('tbCast').classList.toggle('gold', ca === REL); $('tbCast').classList.toggle('off', !ui.castOk);
 }
 applyControls();
+if (input.st.touch) $('goBtn').textContent = L('▶ 시작', '▶ Start');   // 폰에는 마우스 고정이 없다
 function playerInput() {
   if (!S.adv && assist) {   // 쉬운 조작: 버튼 셋(좌클릭·E = 휘두르기, 우클릭 = 마법, Space = 피하기)을 assist가 입력으로 바꾼다
     const inp = assist.step({ move: input.axes(), look: [ctl.yaw, ctl.pitch], cast: input.st.rmb, big: input.held('KeyQ') || input.st.big, swing: input.st.lmb || input.held('KeyE'), dodge: input.held('Space') }, TICK);
@@ -385,20 +392,21 @@ function flingHat(i, vel) {
   fx.fling(clone, wp, vel);
 }
 const PRACTICE = [
-  { key: 'cast', text: '질주하며 마법 쏘기 (우클릭 누르기→떼기)', tt: '질주하며 마법 쏘기 (마법 누르기→떼기)', sm: '질주하며 마법 쏘기 ({마법} 누르고 있다가 금색에 떼기)' },
-  { key: 'hit', text: '휘둘러 맞히기 (좌클릭 누른 채 마우스)', tt: '휘둘러 맞히기 (휘두르기 누른 채 화면 끌기)', sm: '휘둘러 맞히기 ({휘두르기} 누르고 있다가 금색에 떼기)' },
-  { key: 'thrust', text: '찌르기로 맞히기 (C 누른 채 마우스 앞으로)', tt: '찌르기로 맞히기 (찌르기 누른 채 화면을 위로)', sm: '마상창으로 찌르기 (창을 쥐면 {휘두르기} = 찌르기)' },
-  { key: 'deflect', text: '날아오는 마법 쳐내기 (휘두르기)', sm: '날아오는 마법 쳐내기 (버튼이 "쳐내기"일 때 {휘두르기})' },
-  { key: 'unhorse', text: '허수아비 낙마시키기' },
-  { key: 'grab', text: '옆 기수 잡기 (Q 누르고 있기)', tt: '옆 기수 잡기 (잡기 누르고 있기)', adv: true },
-  { key: 'throw', text: '지팡이 던지기 (휘두르는 중 E)', tt: '지팡이 던지기 (휘두르는 중 줍기)', adv: true },
-  { key: 'pickup', text: '지팡이 줍기 (떨어진 지팡이 옆에서 E)', tt: '지팡이 줍기 (떨어진 지팡이 옆에서 줍기)', sm: '무기 바꿔 쥐기 (무기 더미 옆에서 천천히 → "줍기")' },
-  { key: 'kick', text: '걸어서 발차기 (Space)', tt: '걸어서 발차기 (숙이기)', sm: '걸어서 발차기 ({피하기})' },
-  { key: 'mount', text: '다시 타기 (멈춘 빈 말 옆에서 E)', tt: '다시 타기 (멈춘 빈 말 옆에서 타기)', sm: '다시 타기 (빈 말 옆에서 "타기")' },
+  { key: 'cast', text: L('질주하며 마법 쏘기 (우클릭 누르기→떼기)', 'Cast while galloping (hold right-click → release)'), tt: L('질주하며 마법 쏘기 (마법 누르기→떼기)', 'Cast while galloping (hold Magic → release)'), sm: L('질주하며 마법 쏘기 ({마법} 누르고 있다가 금색에 떼기)', 'Cast while galloping (hold {마법}, release on gold)') },
+  { key: 'hit', text: L('휘둘러 맞히기 (좌클릭 누른 채 마우스)', 'Land a swing (hold left-click and move the mouse)'), tt: L('휘둘러 맞히기 (휘두르기 누른 채 화면 끌기)', 'Land a swing (hold Swing and drag the screen)'), sm: L('휘둘러 맞히기 ({휘두르기} 누르고 있다가 금색에 떼기)', 'Land a swing (hold {휘두르기}, release on gold)') },
+  { key: 'thrust', text: L('찌르기로 맞히기 (C 누른 채 마우스 앞으로)', 'Land a thrust (hold C, push the mouse forward)'), tt: L('찌르기로 맞히기 (찌르기 누른 채 화면을 위로)', 'Land a thrust (hold Thrust, drag up)'), sm: L('마상창으로 찌르기 (창을 쥐면 {휘두르기} = 찌르기)', 'Thrust with the lance (holding a lance, {휘두르기} = thrust)') },
+  { key: 'deflect', text: L('날아오는 마법 쳐내기 (휘두르기)', 'Parry an incoming spell (swing)'), sm: L('날아오는 마법 쳐내기 (버튼이 "쳐내기"일 때 {휘두르기})', 'Parry an incoming spell ({휘두르기} when the button reads "Parry")') },
+  { key: 'unhorse', text: L('허수아비 낙마시키기', 'Knock the scarecrow off its horse') },
+  { key: 'grab', text: L('옆 기수 잡기 (Q 누르고 있기)', 'Grab a rider alongside (hold Q)'), tt: L('옆 기수 잡기 (잡기 누르고 있기)', 'Grab a rider alongside (hold Grab)'), adv: true },
+  { key: 'throw', text: L('지팡이 던지기 (휘두르는 중 E)', 'Throw your staff (E while swinging)'), tt: L('지팡이 던지기 (휘두르는 중 줍기)', 'Throw your staff (Pick up while swinging)'), adv: true },
+  { key: 'pickup', text: L('지팡이 줍기 (떨어진 지팡이 옆에서 E)', 'Pick up a staff (E beside a dropped staff)'), tt: L('지팡이 줍기 (떨어진 지팡이 옆에서 줍기)', 'Pick up a staff (Pick up beside a dropped staff)'), sm: L('무기 바꿔 쥐기 (무기 더미 옆에서 천천히 → "줍기")', 'Swap weapons (go slowly beside the weapon pile → "Pick up")') },
+  { key: 'kick', text: L('걸어서 발차기 (Space)', 'Kick on foot (Space)'), tt: L('걸어서 발차기 (숙이기)', 'Kick on foot (Duck)'), sm: L('걸어서 발차기 ({피하기})', 'Kick on foot ({피하기})') },
+  { key: 'mount', text: L('다시 타기 (멈춘 빈 말 옆에서 E)', 'Remount (E beside a stopped riderless horse)'), tt: L('다시 타기 (멈춘 빈 말 옆에서 타기)', 'Remount (Mount beside a stopped riderless horse)'), sm: L('다시 타기 (빈 말 옆에서 "타기")', 'Remount (beside a riderless horse → "Mount")') },
 ];
 // 쉬운 조작의 버튼 이름: 폰은 화면 버튼, PC는 마우스·키
-const BTN_PC = { 마법: '우클릭', 휘두르기: '좌클릭', 피하기: 'Space' };
-const bname = (n) => (input.st.touch ? n : BTN_PC[n] || n);
+const BTN_PC = LANG === 'en' ? { 마법: 'right-click', 휘두르기: 'left-click', 피하기: 'Space' } : { 마법: '우클릭', 휘두르기: '좌클릭', 피하기: 'Space' };
+const BTN_TOUCH_EN = { 마법: 'Magic', 휘두르기: 'Swing', 피하기: 'Duck' };   // 폰 화면 버튼 이름
+const bname = (n) => (input.st.touch ? (LANG === 'en' ? BTN_TOUCH_EN[n] || n : n) : BTN_PC[n] || n);
 const ptext = (p) => (!S.adv ? (p.sm || p.text).replace(/\{(\S+?)\}/g, (_, n) => bname(n)) : (input.st.touch && p.tt) || p.text);
 const SIMPLE_ORDER = ['cast', 'hit', 'deflect', 'unhorse', 'pickup', 'thrust', 'kick', 'mount'];
 const practiceItems = () => (S.adv ? PRACTICE : SIMPLE_ORDER.map((k) => PRACTICE.find((p) => p.key === k))).map((p) => ({ key: p.key, text: ptext(p) }));
@@ -426,7 +434,7 @@ function handleEvents(evs) {
         const me = e.hits.find((h) => h.i === pi);
         if (me) hud.flash(0.25 + me.dmg / 70);
         for (const h of e.hits) if (h.J > 60) headKick(vis, h.i, V(match.fighters[h.i].rider.body.translation().x - P.x, 0, match.fighters[h.i].rider.body.translation().z - P.z).normalize(), Math.min(9, h.J / 25), vis.fighters[h.i].w.root.quaternion);
-        if (e.deflected && e.hits.length && e.owner === pi) hud.feed(`↩ 되받아친 마법이 ${e.hits.map((h) => colorName(F(h.i))).join(', ')}에게 명중!`);
+        if (e.deflected && e.hits.length && e.owner === pi) hud.feed(L(`↩ 되받아친 마법이 ${e.hits.map((h) => colorName(F(h.i))).join(', ')}에게 명중!`, `↩ The deflected spell hit ${e.hits.map((h) => colorName(F(h.i))).join(', ')}!`));
         arena.setCheer(0.25);
         break;
       }
@@ -447,7 +455,7 @@ function handleEvents(evs) {
       }
       case 'hit': {
         const head = e.part === 'head', g = F(e.j);
-        const word = e.thrown ? '휙-퍽!' : e.thrust ? '푹!' : e.fist ? '퍽!' : head ? '퍽!' : '쿵!';
+        const word = e.thrown ? L('휙-퍽!', 'Whoosh-thunk!') : e.thrust ? L('푹!', 'Stab!') : e.fist ? L('퍽!', 'Pow!') : head ? L('퍽!', 'Bonk!') : L('쿵!', 'Thud!');
         const sc = clamp(camera.position.distanceTo(P) / 9, 1, 3.2);   // 멀수록 크게 그려서 화면에서 잘 보이게
         fx.burst(P, e.thrust ? 0xff9cff : head ? 0xffe14d : 0xffb37a, sc, e.s > 14 || head);
         fx.stars(P, head ? 10 : 6, 0xffe14d, sc); fx.pop(word, P, e.thrust ? '#ffb3ff' : head ? '#ffe14d' : '#ffb37a', (1.1 + Math.min(1, e.s / 20)) * sc);
@@ -465,24 +473,24 @@ function handleEvents(evs) {
       }
       case 'clash': fx.sparks(P, e.metal ? 0xffe9b0 : 0xffffff, 10, 5); audio.play(e.metal ? 'clank' : 'clack', P, Math.min(1.2, e.s / 10)); break;
       case 'disarm': {
-        fx.sparks(P, 0xffe9b0, 18, 8); fx.pop('쨍!', P, '#fff3a0', 1.3);
+        fx.sparks(P, 0xffe9b0, 18, 8); fx.pop(L('쨍!', 'Clang!'), P, '#fff3a0', 1.3);
         audio.play('clank', P, 1); audio.play('ooh', 0.8);
-        hud.feed(`💥 ${CJ(F(e.i), '이/가')} ${colorName(F(e.j))}의 지팡이를 쳐냈다!`);
-        if (e.j === pi) hud.toast('지팡이를 놓쳤다! 떨어진 지팡이 옆에서 <kbd>E</kbd>로 줍기 (남의 것도 된다)', 4, 'disarm');
+        hud.feed(L(`💥 ${CJ(F(e.i), '이/가')} ${colorName(F(e.j))}의 지팡이를 쳐냈다!`, `💥 ${colorName(F(e.i))} knocked ${colorName(F(e.j))}’s staff away!`));
+        if (e.j === pi) hud.toast(L('지팡이를 놓쳤다! 떨어진 지팡이 옆에서 <kbd>E</kbd>로 줍기 (남의 것도 된다)', 'You lost your staff! Press <kbd>E</kbd> beside a dropped staff to pick it up (anyone’s will do)'), 4, 'disarm');
         break;
       }
       case 'drop': if (e.cause !== 'throw') audio.play('rattle', P, 0.7); break;
       case 'clatter': audio.play('rattle', P, Math.min(1, e.s / 8)); break;
-      case 'throw': audio.play('throw', P, 1); if (e.i === pi) { practiceTick('throw'); hud.toast('던졌다! 이제 맨손 — 주먹으로 싸우거나 지팡이를 주워라', 2.5, 'throw'); } else voice(F(e.i), 'huff', 0.6); break;
-      case 'pickup': audio.play('pickup', P, 1); if (e.i === pi) { practiceTick('pickup'); hud.toast(`${J(match.weapons[e.w].item.name, '을/를')} 쥐었다`, 1.6, 'pickup'); } break;
-      case 'grab': voice(F(e.i), 'huff', 0.8); if (e.i === pi) { practiceTick('grab'); hud.toast('잡았다! 말을 몰아 멀어지면 끌어내린다 · Q를 떼면 놓는다', 2.5, 'grab'); } if (e.j === pi) hud.toast(`😨 ${CJ(F(e.i), '이/가')} 나를 잡았다!`, 2, 'grabbed'); break;
-      case 'grabMiss': if (e.i === pi) hud.toast('잡을 게 없다 (1m 안의 기수나 빈 말)', 1.4, 'gm'); break;
+      case 'throw': audio.play('throw', P, 1); if (e.i === pi) { practiceTick('throw'); hud.toast(L('던졌다! 이제 맨손 — 주먹으로 싸우거나 지팡이를 주워라', 'Thrown! Bare-handed now — fight with fists or pick up a staff'), 2.5, 'throw'); } else voice(F(e.i), 'huff', 0.6); break;
+      case 'pickup': audio.play('pickup', P, 1); if (e.i === pi) { practiceTick('pickup'); hud.toast(L(`${J(match.weapons[e.w].item.name, '을/를')} 쥐었다`, `Picked up ${match.weapons[e.w].item.name}`), 1.6, 'pickup'); } break;
+      case 'grab': voice(F(e.i), 'huff', 0.8); if (e.i === pi) { practiceTick('grab'); hud.toast(L('잡았다! 말을 몰아 멀어지면 끌어내린다 · Q를 떼면 놓는다', 'Grabbed! Ride away to drag them off · release Q to let go'), 2.5, 'grab'); } if (e.j === pi) hud.toast(L(`😨 ${CJ(F(e.i), '이/가')} 나를 잡았다!`, `😨 ${colorName(F(e.i))} grabbed you!`), 2, 'grabbed'); break;
+      case 'grabMiss': if (e.i === pi) hud.toast(L('잡을 게 없다 (1m 안의 기수나 빈 말)', 'Nothing to grab (a rider or empty horse within 1 m)'), 1.4, 'gm'); break;
       case 'kick':
         if (e.miss) { audio.play('whoosh', P, 0.5); break; }
-        audio.play('kick', P, 1); fx.pop('뻥!', P, '#ffd27a', 1.2); fx.dust(P, 4);
+        audio.play('kick', P, 1); fx.pop(L('뻥!', 'Bam!'), P, '#ffd27a', 1.2); fx.dust(P, 4);
         if (e.i === pi) practiceTick('kick');
         break;
-      case 'knockdown': fx.dust(P, 8, 0xe8d2a8, 1); audio.play('ooh', 0.7); if (nearCam(P) || e.i === pi) slowT = Math.max(slowT, 0.45); if (e.i === pi) { hud.center('넘어졌다!', 1.2); cam.shake += 0.5; } lastBig = { tick: match.tick, focus: e.i, by: e.by }; if (e.i === pi || e.by === pi) queueReplay(e.i); break;
+      case 'knockdown': fx.dust(P, 8, 0xe8d2a8, 1); audio.play('ooh', 0.7); if (nearCam(P) || e.i === pi) slowT = Math.max(slowT, 0.45); if (e.i === pi) { hud.center(L('넘어졌다!', 'Knocked down!'), 1.2); cam.shake += 0.5; } lastBig = { tick: match.tick, focus: e.i, by: e.by }; if (e.i === pi || e.by === pi) queueReplay(e.i); break;
       case 'unhorse': {
         const f = F(e.i), by = e.by >= 0 ? F(e.by) : null;
         audio.play('neigh', P, 0.9); audio.play('cheer', 1); arena.setCheer(1);
@@ -490,64 +498,65 @@ function handleEvents(evs) {
         const v = f.rider.body.linvel(); flingHat(e.i, V(v.x * 0.6 + (Math.random() - 0.5) * 3, 4 + Math.random() * 3, v.z * 0.6 + (Math.random() - 0.5) * 3));
         const grabbed = by && by.grab && by.grab.kind === 'rider' && by.grab.i === f.i;
         const how = { gust: '돌풍으로 ', tornado: '회오리로 ', fissure: '땅가르기로 ', wall: '흙벽으로 ', whip: '물채찍으로 끌어 ', ice: '빙판에서 ', fireball: '화염구로 ', firetrail: '불길로 ', orb: '' }[e.spell] || '';
-        hud.feed(by && by !== f ? `🐴 ${CJ(by, '이/가')} ${CJ(f, '을/를')} ${grabbed ? '잡아 끌어내렸다!' : how + '낙마시켰다!'}` : `🐴 ${CJ(f, '이/가')} 말에서 떨어졌다!`);
+        const howEn = { gust: ' with a gust', tornado: ' with a tornado', fissure: ' with a fissure', wall: ' with an earth wall', whip: ' with a water whip', ice: ' on the ice', fireball: ' with a fireball', firetrail: ' with a fire trail', orb: '' }[e.spell] || '';
+        hud.feed(by && by !== f ? L(`🐴 ${CJ(by, '이/가')} ${CJ(f, '을/를')} ${grabbed ? '잡아 끌어내렸다!' : how + '낙마시켰다!'}`, `🐴 ${colorName(by)} ${grabbed ? 'dragged' : 'unhorsed'} ${colorName(f)}${grabbed ? ' off their horse' : howEn}!`) : L(`🐴 ${CJ(f, '이/가')} 말에서 떨어졌다!`, `🐴 ${colorName(f)} fell off their horse!`));
         if (e.i === pi || e.by === pi || nearCam(P)) slowT = 0.65;
         if (e.i === pi && tst) tst.fell++;
-        if (e.i === pi) { hud.center('낙마!', 1.4); hud.toast('떨어져도 끝이 아니다! 비틀대며 일어나서 빈 말 옆에서 <kbd>E</kbd>', 5); cam.shake += 0.6; }
-        if (e.by === pi) { hud.center(grabbed ? '끌어내렸다!' : '낙마시켰다!', 1.2); practiceTick('unhorse'); }
+        if (e.i === pi) { hud.center(L('낙마!', 'Unhorsed!'), 1.4); hud.toast(L('떨어져도 끝이 아니다! 비틀대며 일어나서 빈 말 옆에서 <kbd>E</kbd>', 'It is not over! Get up, then press <kbd>E</kbd> beside a riderless horse'), 5); cam.shake += 0.6; }
+        if (e.by === pi) { hud.center(grabbed ? L('끌어내렸다!', 'Dragged off!') : L('낙마시켰다!', 'Unhorsed!'), 1.2); practiceTick('unhorse'); }
         lastBig = { tick: match.tick, focus: e.i, by: e.by };
         if (e.i === pi || e.by === pi) queueReplay(e.i);
         break;
       }
       case 'land': fx.dust(P, 6, 0xe8d2a8, 0.8); audio.play('thud', P, Math.min(1.2, e.s / 8)); if (match.fighters[e.i] === player) cam.shake += 0.3; break;
-      case 'mount': audio.play('neigh', match.horses[e.k].body.translation(), 0.4); if (e.i === pi) { hud.center('다시 탔다!', 1); hud.hideToast(); practiceTick('mount'); } break;
-      case 'mountFail': if (e.i === pi) hud.toast('말이 너무 멀거나 아직 달리고 있다 (겁먹은 말은 Q로 머리를 잡아 세운다)', 2, 'mf'); break;
+      case 'mount': audio.play('neigh', match.horses[e.k].body.translation(), 0.4); if (e.i === pi) { hud.center(L('다시 탔다!', 'Remounted!'), 1); hud.hideToast(); practiceTick('mount'); } break;
+      case 'mountFail': if (e.i === pi) hud.toast(L('말이 너무 멀거나 아직 달리고 있다 (겁먹은 말은 Q로 머리를 잡아 세운다)', 'The horse is too far or still running (hold Q to grab a spooked horse by the head and stop it)'), 2, 'mf'); break;
       case 'ko': {
         const f = F(e.i), by = e.by >= 0 ? F(e.by) : null;
-        fx.stars(P, 12, 0xffffff); fx.pop('기절!', P, '#ff7a6a', 1.8 * clamp(camera.position.distanceTo(P) / 9, 1, 3));
+        fx.stars(P, 12, 0xffffff); fx.pop(L('기절!', 'KO!'), P, '#ff7a6a', 1.8 * clamp(camera.position.distanceTo(P) / 9, 1, 3));
         if (e.by === pi && e.i !== pi) hud.hitMarker('kill');
         if (e.i === pi && tst) tst.koMe++;
         audio.play('boom', P, 0.4); audio.play('cheer', 1.2); arena.setCheer(1); voice(f, 'cry', 1.2);
         flingHat(e.i, V((Math.random() - 0.5) * 4, 5, (Math.random() - 0.5) * 4));
-        hud.feed(`💤 ${CJ(f, '이/가')} 기절했다${by && by !== f ? ` (${colorName(by)})` : ''}`);
+        hud.feed(L(`💤 ${CJ(f, '이/가')} 기절했다${by && by !== f ? ` (${colorName(by)})` : ''}`, `💤 ${colorName(f)} was knocked out${by && by !== f ? ` (${colorName(by)})` : ''}`));
         slowT = Math.max(slowT, 0.5);
         lastBig = { tick: match.tick, focus: e.i, by: e.by };
         break;
       }
-      case 'revive': if (kind === 'practice') hud.feed(`🎯 ${CJ(F(e.i), '이/가')} 다시 일어났다`); break;
-      case 'trample': fx.dust(P, 8); audio.play('bonk', P, 1.2, false); hud.feed(`🐎 ${colorName(F(e.j))} 말발굽에 밟혔다!`); if (e.j === pi) { cam.shake += 0.7; hud.flash(0.4); } break;
-      case 'buck': audio.play('neigh', match.horses[e.k].body.translation(), 0.8); if (e.i === pi) hud.toast(`😱 ${J(match.horses[e.k].def.name, '이/가')} 겁에 질려 날뛴다! 마법을 아끼고 속도를 줄여요`, 2.5, 'buck'); break;
-      case 'winded': if (player && e.i === pi) { audio.play('neigh', match.horses[e.k].body.translation(), 0.5); hud.toast(`😮‍💨 ${J(match.horses[e.k].def.name, '이/가')} 숨이 찼다! 숨이 돌아올 때까지 질주 못 한다`, 3, 'winded'); } break;
+      case 'revive': if (kind === 'practice') hud.feed(L(`🎯 ${CJ(F(e.i), '이/가')} 다시 일어났다`, `🎯 ${colorName(F(e.i))} got back up`)); break;
+      case 'trample': fx.dust(P, 8); audio.play('bonk', P, 1.2, false); hud.feed(L(`🐎 ${colorName(F(e.j))} 말발굽에 밟혔다!`, `🐎 ${colorName(F(e.j))} was trampled!`)); if (e.j === pi) { cam.shake += 0.7; hud.flash(0.4); } break;
+      case 'buck': audio.play('neigh', match.horses[e.k].body.translation(), 0.8); if (e.i === pi) hud.toast(L(`😱 ${J(match.horses[e.k].def.name, '이/가')} 겁에 질려 날뛴다! 마법을 아끼고 속도를 줄여요`, `😱 ${match.horses[e.k].def.name} is panicking and bucking! Save your mana and slow down`), 2.5, 'buck'); break;
+      case 'winded': if (player && e.i === pi) { audio.play('neigh', match.horses[e.k].body.translation(), 0.5); hud.toast(L(`😮‍💨 ${J(match.horses[e.k].def.name, '이/가')} 숨이 찼다! 숨이 돌아올 때까지 질주 못 한다`, `😮‍💨 ${match.horses[e.k].def.name} is winded! No galloping until it catches its breath`), 3, 'winded'); } break;
       case 'fence': audio.play('creak', P, 0.7); fx.dust(P, 3); break;
       case 'propHit': audio.play('propThud', P, Math.min(1, e.s / 10)); fx.dust(P, 4, 0xe2c169, 0.8); break;
       case 'bump': audio.play('thud', P, 0.6); break;
       case 'hitHorse': audio.play('bonk', P, 0.5, false); break;
       case 'deflect':
-        fx.flash(P, 0x9fe8ff, 1.6, 0.25); fx.sparks(P, 0x9fe8ff, 16, 8); fx.pop('팅!', P, '#9fe8ff', 1.2);
+        fx.flash(P, 0x9fe8ff, 1.6, 0.25); fx.sparks(P, 0x9fe8ff, 16, 8); fx.pop(L('팅!', 'Ting!'), P, '#9fe8ff', 1.2);
         audio.play('ting', P, 1);
-        if (e.i === pi) { hud.toast('↩ 되받아치기! 휘두른 방향으로 날아간다', 2.5); hitStop = 0.06; tut.deflect = true; practiceTick('deflect'); }
+        if (e.i === pi) { hud.toast(L('↩ 되받아치기! 휘두른 방향으로 날아간다', '↩ Deflected! It flies the way you swung'), 2.5); hitStop = 0.06; tut.deflect = true; practiceTick('deflect'); }
         break;
-      case 'surrender': hud.feed(`🏳 ${colorName(F(e.i))} 항복`); break;
+      case 'surrender': hud.feed(L(`🏳 ${colorName(F(e.i))} 항복`, `🏳 ${colorName(F(e.i))} surrendered`)); break;
       // ---------- 4원소 마법 ----------
       case 'gust': audio.play('whoosh', P, 1.2); audio.play('boom', P, 0.4); if (e.i === pi) { cam.shake += 0.3; tut.cast = true; } break;
       case 'wallUp': audio.play('propThud', P, 1); audio.play('thud', P, 0.8); if (e.i === pi) tut.cast = true; break;
       case 'wallDown': break;
-      case 'wallCrash': audio.play('thud', P, 1.3); audio.play('ooh', 0.9); hud.feed(`🧱 ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 흙벽에 박았다!`); if (e.i === pi) cam.shake += 0.7; break;
-      case 'whip': audio.play('throw', P, 0.9); if (e.i === pi) tut.cast = true; if (e.j === pi) hud.toast(`😨 ${CJ(F(e.i), '이/가')} 물채찍으로 나를 묶었다! 더 빨리 달려라`, 2.5, 'whipped'); break;
-      case 'whipMiss': if (e.i === pi) hud.toast('물채찍이 빗나갔다 (14m 안의 상대를 겨눠라)', 1.6, 'wm'); break;
+      case 'wallCrash': audio.play('thud', P, 1.3); audio.play('ooh', 0.9); hud.feed(L(`🧱 ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 흙벽에 박았다!`, `🧱 ${e.i >= 0 ? colorName(F(e.i)) + '’s horse' : 'A riderless horse'} crashed into the earth wall!`)); if (e.i === pi) cam.shake += 0.7; break;
+      case 'whip': audio.play('throw', P, 0.9); if (e.i === pi) tut.cast = true; if (e.j === pi) hud.toast(L(`😨 ${CJ(F(e.i), '이/가')} 물채찍으로 나를 묶었다! 더 빨리 달려라`, `😨 ${colorName(F(e.i))} tied you up with a water whip! Ride faster`), 2.5, 'whipped'); break;
+      case 'whipMiss': if (e.i === pi) hud.toast(L('물채찍이 빗나갔다 (14m 안의 상대를 겨눠라)', 'The water whip missed (aim at a rival within 14 m)'), 1.6, 'wm'); break;
       case 'whipCut': break;
       case 'iceUp': audio.play('ting', P, 0.8); if (e.i === pi) tut.cast = true; break;
-      case 'slip': audio.play('neigh', P, 0.9); hud.feed(`🧊 ${colorName(F(e.i))}의 말이 빙판에서 미끄러졌다!`); break;
+      case 'slip': audio.play('neigh', P, 0.9); hud.feed(L(`🧊 ${colorName(F(e.i))}의 말이 빙판에서 미끄러졌다!`, `🧊 ${colorName(F(e.i))}’s horse slipped on the ice!`)); break;
       case 'tornado': audio.play('whoosh', P, 1.4); if (e.i === pi) tut.cast = true; break;
-      case 'fireTornado': hud.feed('🔥🌪️ 불 회오리!'); break;
+      case 'fireTornado': hud.feed(L('🔥🌪️ 불 회오리!', '🔥🌪️ Fire tornado!')); break;
       case 'swallow': break;
       case 'fissure': audio.play('boom', P, 0.7); audio.play('thud', P, 1); if (e.i === pi) { cam.shake += 0.25; tut.cast = true; } break;
-      case 'trip': audio.play('neigh', P, 1); hud.feed(`⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 고꾸라졌다!`); break;
+      case 'trip': audio.play('neigh', P, 1); hud.feed(L(`⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '의 말' : '빈 말'}이 고꾸라졌다!`, `⛰️ ${e.i >= 0 ? colorName(F(e.i)) + '’s horse' : 'A riderless horse'} stumbled and fell!`)); break;
       case 'trail': if (e.on) { audio.play('cast', P, 0.5, 0.2); if (e.i === pi) tut.cast = true; } break;
       case 'zoneFear': if (e.add > 40) audio.play('neigh', P, 0.6); break;
-      case 'steam': audio.play('whoosh', P, 0.8); hud.feed('♨️ 불과 얼음이 만나 김이 솟았다'); break;
+      case 'steam': audio.play('whoosh', P, 0.8); hud.feed(L('♨️ 불과 얼음이 만나 김이 솟았다', '♨️ Fire met ice and steam rose')); break;
       case 'iceBreak': audio.play('ting', P, 1); break;
-      case 'getup': if (e.i === pi) hud.toast('일어났다! <kbd>WASD</kbd> 걷기 · <kbd>Shift</kbd> 뛰기 · <kbd>Space</kbd> 발차기 · 빈 말 옆에서 <kbd>E</kbd>', 3.5); break;
+      case 'getup': if (e.i === pi) hud.toast(L('일어났다! <kbd>WASD</kbd> 걷기 · <kbd>Shift</kbd> 뛰기 · <kbd>Space</kbd> 발차기 · 빈 말 옆에서 <kbd>E</kbd>', 'Up! <kbd>WASD</kbd> walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> kick · <kbd>E</kbd> beside a riderless horse'), 3.5); break;
     }
   }
 }
@@ -580,19 +589,19 @@ function tutorialTick() {
   const p = player, sp = p.horse >= 0 ? match.horses[p.horse].speed : 0;
   if (!S.adv) {   // 쉬운 조작: 바운코처럼 한 단계씩
     const B = (n) => `<b>${bname(n)}</b>`;
-    if (!tut.s1) { tut.s1 = true; hud.toast(`1 · 말은 저절로 달린다. ${input.st.touch ? '스틱을 끝까지 밀면' : '<kbd>W</kbd>를 누르면'} 질주 — 빠를수록 <b>마력</b>이 찬다`, 6); return; }
-    if (!tut.s2 && sp > 8) { tut.s2 = true; hud.toast(`2 · ${B('마법')}을 누르고 있다가, 상대 둘레 조준선이 <b style="color:#b8860b">금색</b>이 되면 떼라`, 7); return; }
-    if (tut.cast && !tut.s3) { tut.s3 = true; hud.toast(`3 · ${B('휘두르기')}를 누르고 있으면 말이 상대 옆으로 붙는다. 금색일 때 떼면 친다`, 7); return; }
-    if (tut.hit && !tut.s4) { tut.s4 = true; hud.toast(`4 · 맞을 것 같으면 ${B('피하기')}(숙이기). 버튼 이름이 바뀌면 그 일을 한다 (쳐내기·줍기·타기)`, 7); return; }
-    if (!tut.s5 && match.spells.some((s) => s.owner !== p.i)) { tut.s5 = true; hud.toast(`마법이 날아온다! ${B('휘두르기')} = 쳐내기로 되받아쳐라`, 3.5); }
+    if (!tut.s1) { tut.s1 = true; hud.toast(L(`1 · 말은 저절로 달린다. ${input.st.touch ? '스틱을 끝까지 밀면' : '<kbd>W</kbd>를 누르면'} 질주 — 빠를수록 <b>마력</b>이 찬다`, `1 · The horse runs on its own. ${input.st.touch ? 'Push the stick all the way' : 'Hold <kbd>W</kbd>'} to gallop — the faster you go, the more <b>mana</b> you have`), 6); return; }
+    if (!tut.s2 && sp > 8) { tut.s2 = true; hud.toast(L(`2 · ${B('마법')}을 누르고 있다가, 상대 둘레 조준선이 <b style="color:#b8860b">금색</b>이 되면 떼라`, `2 · Hold ${B('마법')}, and release when the ring around a rival turns <b style="color:#b8860b">gold</b>`), 7); return; }
+    if (tut.cast && !tut.s3) { tut.s3 = true; hud.toast(L(`3 · ${B('휘두르기')}를 누르고 있으면 말이 상대 옆으로 붙는다. 금색일 때 떼면 친다`, `3 · Hold ${B('휘두르기')} and your horse closes in beside the rival. Release on gold to strike`), 7); return; }
+    if (tut.hit && !tut.s4) { tut.s4 = true; hud.toast(L(`4 · 맞을 것 같으면 ${B('피하기')}(숙이기). 버튼 이름이 바뀌면 그 일을 한다 (쳐내기·줍기·타기)`, `4 · If you are about to get hit, ${B('피하기')} (duck). When the button name changes, it does that instead (Parry · Pick up · Mount)`), 7); return; }
+    if (!tut.s5 && match.spells.some((s) => s.owner !== p.i)) { tut.s5 = true; hud.toast(L(`마법이 날아온다! ${B('휘두르기')} = 쳐내기로 되받아쳐라`, `A spell is incoming! ${B('휘두르기')} = parry it back`), 3.5); }
     return;
   }
-  if (!tut.s1) { tut.s1 = true; hud.toast('<kbd>W</kbd> 박차! 빨리 달릴수록 지팡이 끝과 조준 고리가 밝아진다 = <b>마력</b>', 6); return; }
-  if (!tut.s2 && sp > 9) { tut.s2 = true; hud.toast('좋아! 이제 <b>우클릭을 누르고 있다가 떼면</b> 발사. 쏜 만큼 말이 느려진다', 7); return; }
-  if (tut.cast && !tut.s3) { tut.s3 = true; hud.toast('<b>좌클릭을 누른 채 마우스를 휘두르면</b> 지팡이로 친다. 스치며 머리를 노려라', 7); return; }
-  if (tut.hit && !tut.s4) { tut.s4 = true; hud.toast('<kbd>C</kbd>를 누르고 마우스를 앞으로 밀면 <b>찌르기</b> · <kbd>Q</kbd>로 옆 기수를 <b>잡아 끌어내린다</b>', 7); return; }
-  if (tut.s4 && !tut.s6 && match.t > 50) { tut.s6 = true; hud.toast('바깥 초록 고리 = 기운. 계속 휘두르면 힘이 빠진다 · 말도 질주하면 숨이 찬다', 6); return; }
-  if (!tut.s5 && match.spells.some((s) => s.owner !== p.i)) { tut.s5 = true; hud.toast('날아오는 마법을 <b>지팡이로 후려치면</b> 되돌아간다!', 4); }
+  if (!tut.s1) { tut.s1 = true; hud.toast(L('<kbd>W</kbd> 박차! 빨리 달릴수록 지팡이 끝과 조준 고리가 밝아진다 = <b>마력</b>', '<kbd>W</kbd> to spur! The faster you ride, the brighter the staff tip and aim ring = <b>mana</b>'), 6); return; }
+  if (!tut.s2 && sp > 9) { tut.s2 = true; hud.toast(L('좋아! 이제 <b>우클릭을 누르고 있다가 떼면</b> 발사. 쏜 만큼 말이 느려진다', 'Good! Now <b>hold right-click and release</b> to fire. Your horse slows by what you spend'), 7); return; }
+  if (tut.cast && !tut.s3) { tut.s3 = true; hud.toast(L('<b>좌클릭을 누른 채 마우스를 휘두르면</b> 지팡이로 친다. 스치며 머리를 노려라', '<b>Hold left-click and swing the mouse</b> to strike with the staff. Ride past close and aim for the head'), 7); return; }
+  if (tut.hit && !tut.s4) { tut.s4 = true; hud.toast(L('<kbd>C</kbd>를 누르고 마우스를 앞으로 밀면 <b>찌르기</b> · <kbd>Q</kbd>로 옆 기수를 <b>잡아 끌어내린다</b>', 'Hold <kbd>C</kbd> and push the mouse forward to <b>thrust</b> · <kbd>Q</kbd> <b>grabs and drags</b> a rider alongside'), 7); return; }
+  if (tut.s4 && !tut.s6 && match.t > 50) { tut.s6 = true; hud.toast(L('바깥 초록 고리 = 기운. 계속 휘두르면 힘이 빠진다 · 말도 질주하면 숨이 찬다', 'The outer green ring = stamina. Swinging nonstop tires you · a galloping horse runs out of breath too'), 6); return; }
+  if (!tut.s5 && match.spells.some((s) => s.owner !== p.i)) { tut.s5 = true; hud.toast(L('날아오는 마법을 <b>지팡이로 후려치면</b> 되돌아간다!', 'Swat an incoming spell <b>with your staff</b> and it flies back!'), 4); }
 }
 
 // ---------- 화면 ----------
@@ -640,16 +649,16 @@ function poseDisplay(dt, t) {
 function chipHTML(id, extra = '') { const c = CHARS[id]; return `<span class="chip"><i style="background:${c.css}"></i>${c.name}${extra}</span>`; }
 function itemDesc(id) {
   const it = ITEMS[id];
-  if (it.slot === 'staff') return `${it.mass}kg · 길이 ${it.len}${it.spellMul !== 1 ? ` · 마법 ×${it.spellMul}` : ''}${it.thrustMul ? ` · 찌르기 ×${it.thrustMul}` : ''}${it.tipMul ? ` · 끝 ×${it.tipMul}` : ''}`;
-  if (it.slot === 'hat') return `머리 피해 ×${it.headMul}`;
-  if (it.slot === 'robe') return `몸통 피해 ×${it.torsoMul} · 균형 ×${it.balance}`;
-  if (id === 'saddle') return '균형 ×1.4 · 속도 ×0.92';
-  if (id === 'spurs') return '가속 ×1.3 · 공포 ×1.3';
+  if (it.slot === 'staff') return L(`${it.mass}kg · 길이 ${it.len}${it.spellMul !== 1 ? ` · 마법 ×${it.spellMul}` : ''}${it.thrustMul ? ` · 찌르기 ×${it.thrustMul}` : ''}${it.tipMul ? ` · 끝 ×${it.tipMul}` : ''}`, `${it.mass}kg · length ${it.len}${it.spellMul !== 1 ? ` · spell ×${it.spellMul}` : ''}${it.thrustMul ? ` · thrust ×${it.thrustMul}` : ''}${it.tipMul ? ` · tip ×${it.tipMul}` : ''}`);
+  if (it.slot === 'hat') return L(`머리 피해 ×${it.headMul}`, `Head damage ×${it.headMul}`);
+  if (it.slot === 'robe') return L(`몸통 피해 ×${it.torsoMul} · 균형 ×${it.balance}`, `Torso damage ×${it.torsoMul} · balance ×${it.balance}`);
+  if (id === 'saddle') return L('균형 ×1.4 · 속도 ×0.92', 'Balance ×1.4 · speed ×0.92');
+  if (id === 'spurs') return L('가속 ×1.3 · 공포 ×1.3', 'Acceleration ×1.3 · fear ×1.3');
   return '';
 }
 // ---------- 마구간 · 상점 · 전직관 ----------
 const SHOP_ICON = { stick: '🪵', oak: '🌳', iron: '⚙️', crystal: '💎', lance: '🔱', mace: '🔨', oldcone: '🎩', felt: '🎩', brass: '⛑️', rags: '👘', quilted: '🧥', nogear: '🐴', saddle: '🪑', spurs: '⭐' };
-const STAT_ROWS = [['hit', '⚔ 타격', 80], ['magic', '✨ 마법', 160], ['mana', '🔋 마력통', 100], ['hold', '🛡 버티기', 160]];
+const STAT_ROWS = [['hit', L('⚔ 타격', '⚔ Strike'), 80], ['magic', L('✨ 마법', '✨ Magic'), 160], ['mana', L('🔋 마력통', '🔋 Mana Pool'), 100], ['hold', L('🛡 버티기', '🛡 Toughness'), 160]];
 function statBars(a, b, why = '') {   // a: 지금(또는 보너스 없는 값), b: 바꾼 뒤
   return STAT_ROWS.map(([k, lb, max]) => {
     const x = a[k], y = b[k], lo = Math.min(x, y), hi = Math.max(x, y), d = y - x, up = d > 0;
@@ -667,31 +676,31 @@ function oppChip(id, fight) {
 }
 function renderHub() {
   const c = career, cf = currentFights(c), offer = jobOffer(c), Jb = myJob() ? JOBS[c.job] : null;
-  $('rankBadge').textContent = (Jb ? `${Jb.icon} ${Jb.name} ${c.jobTier}차 · ` : '') + rankName(c.rank) + (c.champion ? ' 🏆' : '');
+  $('rankBadge').textContent = (Jb ? L(`${Jb.icon} ${Jb.name} ${c.jobTier}차 · `, `${Jb.icon} ${Jb.name} T${c.jobTier} · `) : '') + rankName(c.rank) + (c.champion ? ' 🏆' : '');
   if (Jb) { $('rankBadge').style.background = Jb.css; $('rankBadge').style.color = '#2a1608'; } else { $('rankBadge').style.background = ''; $('rankBadge').style.color = ''; }
   $('rankBar').style.width = Math.min(100, c.points / cf.rank.unlock * 100) + '%';
-  $('rankPts').textContent = `${c.points} / ${cf.rank.unlock}점`;
+  $('rankPts').textContent = L(`${c.points} / ${cf.rank.unlock}점`, `${c.points} / ${cf.rank.unlock} pts`);
   $('goldTxt').textContent = c.gold;
-  $('hubStats').innerHTML = statBars(statsFor(c.loadout, null), statsFor(c.loadout, myJob()), '전직');
+  $('hubStats').innerHTML = statBars(statsFor(c.loadout, null), statsFor(c.loadout, myJob()), L('전직', 'job'));
   const sl = slotsFor(myJob(), c.jobTier), big = Jb ? Jb.spells[1] : null, tch = input.st.touch;
-  $('hubSpells').innerHTML = `<div><kbd>${tch ? '마법' : '우클릭'}</kbd> 마법<b>${SPELLS[sl.main].icon} ${SPELLS[sl.main].name}</b></div>`
-    + `<div class="${sl.big ? '' : 'lock'}"><kbd>${tch ? '큰 마법' : 'Q'}</kbd> 큰 마법<b>${sl.big ? SPELLS[sl.big].icon + ' ' + SPELLS[sl.big].name : '🔒 ' + (big ? SPELLS[big].name : '전직하면 열림')}</b>${sl.big ? '' : (Jb ? '랭크 결정전을 이기면 2차 전직' : '첫 승리 뒤 전직관에서')}</div>`;
+  $('hubSpells').innerHTML = `<div><kbd>${tch ? L('마법', 'Magic') : L('우클릭', 'R-click')}</kbd> ${L('마법', 'Spell')}<b>${SPELLS[sl.main].icon} ${SPELLS[sl.main].name}</b></div>`
+    + `<div class="${sl.big ? '' : 'lock'}"><kbd>${tch ? L('큰 마법', 'Big spell') : 'Q'}</kbd> ${L('큰 마법', 'Big spell')}<b>${sl.big ? SPELLS[sl.big].icon + ' ' + SPELLS[sl.big].name : '🔒 ' + (big ? SPELLS[big].name : L('전직하면 열림', 'Unlocks on advancement'))}</b>${sl.big ? '' : (Jb ? L('랭크 결정전을 이기면 2차 전직', 'Win the rank decider for the 2nd advancement') : L('첫 승리 뒤 전직관에서', 'At the Advancement Hall after your first win'))}</div>`;
   const worst = worstOf(c.loadout);
-  $('gearRow').innerHTML = [['staff', '지팡이'], ['hat', '모자'], ['robe', '로브'], ['gear', '마구']].map(([k, lb]) => { const id = c.loadout[k]; return `<div class="${id === worst ? 'risk' : ''}">${lb}<b>${SHOP_ICON[id] || ''}</b>${ITEMS[id].name} · ${ITEMS[id].tier}</div>`; }).join('');
+  $('gearRow').innerHTML = [['staff', L('지팡이', 'Staff')], ['hat', L('모자', 'Hat')], ['robe', L('로브', 'Robe')], ['gear', L('마구', 'Tack')]].map(([k, lb]) => { const id = c.loadout[k]; return `<div class="${id === worst ? 'risk' : ''}">${lb}<b>${SHOP_ICON[id] || ''}</b>${ITEMS[id].name} · ${ITEMS[id].tier}</div>`; }).join('');
   const ts = tierSum(c.loadout);
-  $('hubRules').innerHTML = `<span>등급 합 ${ts} → 포인트 ×${tierMul(ts)}</span>${worst ? `<span class="warn">압수 1순위: ${ITEMS[worst].name}</span>` : ''}${Jb ? '<span class="ok">전직은 압수 안 됨</span>' : ''}`;
+  $('hubRules').innerHTML = `<span>${L('등급 합', 'Tier sum')} ${ts} → ${L('포인트', 'points')} ×${tierMul(ts)}</span>${worst ? `<span class="warn">${L('압수 1순위', 'First to be confiscated')}: ${ITEMS[worst].name}</span>` : ''}${Jb ? `<span class="ok">${L('전직은 압수 안 됨', 'Advancement is never confiscated')}</span>` : ''}`;
   const nx = cf.next;
-  $('nextTitle').textContent = offer ? (offer === 1 ? '🔮 전직할 때다' : '🔮 2차 전직') : nx.title;
+  $('nextTitle').textContent = offer ? (offer === 1 ? L('🔮 전직할 때다', '🔮 Time to advance') : L('🔮 2차 전직', '🔮 2nd advancement')) : nx.title;
   $('nextOpps').innerHTML = offer ? '' : nx.opp.map((id) => oppChip(id, nx)).join('');
-  $('nextPersona').innerHTML = offer ? (offer === 1 ? '첫 시합을 이겼다! 전직관에서 네 원소 중 하나를 골라 시험을 치르면 그 원소의 마법을 받는다.' : '랭크 결정전을 이겼다! 전직관에서 큰 마법(Q)을 배운다.')
+  $('nextPersona').innerHTML = offer ? (offer === 1 ? L('첫 시합을 이겼다! 전직관에서 네 원소 중 하나를 골라 시험을 치르면 그 원소의 마법을 받는다.', 'You won your first fight! Pick one of the four elements at the Advancement Hall and pass its trial to receive that element’s magic.') : L('랭크 결정전을 이겼다! 전직관에서 큰 마법(Q)을 배운다.', 'You won the rank decider! Learn your big spell (Q) at the Advancement Hall.'))
     : [...new Set(nx.opp)].map((id) => `<b>${CHARS[id].name}</b>: ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
-  $('nextPts').textContent = offer ? '' : `이기면 기본 ${nx.base}점 × ${tierMul(ts)} + 낙마시킬 때마다 30 + 되받아쳐 맞힐 때마다 50`;
-  $('fightBtn').textContent = offer ? '🔮 전직관' : '⚔ 시합 시작';
+  $('nextPts').textContent = offer ? '' : L(`이기면 기본 ${nx.base}점 × ${tierMul(ts)} + 낙마시킬 때마다 30 + 되받아쳐 맞힐 때마다 50`, `Win for ${nx.base} base pts × ${tierMul(ts)} + 30 per unhorsing + 50 per deflected hit`);
+  $('fightBtn').textContent = offer ? L('🔮 전직관', '🔮 Advancement Hall') : L('⚔ 시합 시작', '⚔ Start Fight');
   $('fightBtn').classList.toggle('pulse', !!offer);
   $('bossTitle').textContent = cf.boss.title;
   $('bossPersona').innerHTML = cf.boss.opp.map((id) => `${oppChip(id, cf.boss)} ${PERSONA_TXT[CHARS[id].persona]}`).join('<br>');
   $('bossBtn').disabled = !cf.bossOpen || !!offer;
-  $('bossBtn').textContent = offer ? '🔮 전직 먼저' : cf.bossOpen ? '👑 결정전 도전' : `🔒 ${cf.rank.unlock}점이면 열림`;
+  $('bossBtn').textContent = offer ? L('🔮 전직 먼저', '🔮 Advance first') : cf.bossOpen ? L('👑 결정전 도전', '👑 Rank Decider') : L(`🔒 ${cf.rank.unlock}점이면 열림`, `🔒 Opens at ${cf.rank.unlock} pts`);
 }
 // 상점: 지팡이 / 옷·마구 탭, 카드를 고르면 스탯 4개 비교와 하프소드 규칙 알약
 let shopTab = 'staff', shopSel = null;
@@ -700,20 +709,20 @@ function renderShop() {
   const c = career, ids = shopTab === 'staff' ? ['stick', 'oak', 'iron', 'crystal', 'lance', 'mace'] : ['oldcone', 'felt', 'brass', 'rags', 'quilted', 'nogear', 'saddle', 'spurs'];
   $('shopGold').textContent = c.gold;
   $('tabStaff').classList.toggle('on', shopTab === 'staff'); $('tabWear').classList.toggle('on', shopTab !== 'staff');
-  $('shopNote').textContent = shopTab === 'staff' ? '지팡이를 바꾸면 휘두르기와 마법 위력이 바뀐다' : '옷과 마구를 바꾸면 버티기와 말 속도가 바뀐다';
+  $('shopNote').textContent = shopTab === 'staff' ? L('지팡이를 바꾸면 휘두르기와 마법 위력이 바뀐다', 'A new staff changes your swing and spell power') : L('옷과 마구를 바꾸면 버티기와 말 속도가 바뀐다', 'New clothes and tack change toughness and horse speed');
   const sel = shopSel || ids.find((id) => c.loadout[ITEMS[id].slot] === id) || ids[0];
   $('shopCards').innerHTML = ids.map((id) => {
     const it = ITEMS[id], own = c.inventory.includes(id), on = c.loadout[it.slot] === id;
-    return `<div class="icard${id === sel ? ' sel' : ''}" data-id="${id}"><span class="tr">등급${it.tier}</span><div class="ic">${SHOP_ICON[id] || '❔'}</div><b>${it.name}</b>${on ? '<span class="eq">들고 있음</span>' : own ? '<span class="own">가짐</span>' : `<div class="pr">🪙 ${it.price}</div>`}</div>`;
+    return `<div class="icard${id === sel ? ' sel' : ''}" data-id="${id}"><span class="tr">${L('등급', 'Tier ')}${it.tier}</span><div class="ic">${SHOP_ICON[id] || '❔'}</div><b>${it.name}</b>${on ? `<span class="eq">${L('들고 있음', 'Equipped')}</span>` : own ? `<span class="own">${L('가짐', 'Owned')}</span>` : `<div class="pr">🪙 ${it.price}</div>`}</div>`;
   }).join('');
   for (const el of $('shopCards').querySelectorAll('.icard')) el.onclick = () => { shopSel = el.dataset.id; audio.play('click'); renderShop(); };
   const it = ITEMS[sel], next = { ...c.loadout, [it.slot]: sel };
   const a = statsFor(c.loadout, myJob()), b = statsFor(next, myJob()), t0 = tierSum(c.loadout), t1 = tierSum(next);
   const own = c.inventory.includes(sel), on = c.loadout[it.slot] === sel, worst = it.price > 0 && worstOf(next) === sel;
   const Jb = myJob() ? JOBS[c.job] : null;
-  $('shopDetail').innerHTML = `<h3>${it.name}<span class="tag">등급 ${it.tier}</span>${Jb ? `<span class="tag" style="background:${Jb.css}">${Jb.icon} ${Jb.bonusTxt} 포함</span>` : ''}</h3><div class="note">${itemDesc(sel) || '기본 장비'}</div>${statBars(a, b)}
-    <div class="rule"><span>장비 등급 합 ${t0} → ${t1}</span><span>이기면 포인트 ×${tierMul(t0)} → <b class="${tierMul(t1) < tierMul(t0) ? 'num dn' : ''}">×${tierMul(t1)}</b></span>${worst ? '<span class="warn">기절해서 지면 압수 1순위가 된다</span>' : ''}</div>
-    <div class="btnRow"><button id="shopAct" class="primary" ${on || (!own && c.gold < it.price) ? 'disabled' : ''}>${on ? '들고 있음' : own ? '바로 들기' : `🪙 ${it.price} 사고 바로 들기`}</button></div>`;
+  $('shopDetail').innerHTML = `<h3>${it.name}<span class="tag">${L('등급', 'Tier')} ${it.tier}</span>${Jb ? `<span class="tag" style="background:${Jb.css}">${Jb.icon} ${Jb.bonusTxt} ${L('포함', 'incl.')}</span>` : ''}</h3><div class="note">${itemDesc(sel) || L('기본 장비', 'Starter gear')}</div>${statBars(a, b)}
+    <div class="rule"><span>${L('장비 등급 합', 'Gear tier sum')} ${t0} → ${t1}</span><span>${L('이기면 포인트', 'Win points')} ×${tierMul(t0)} → <b class="${tierMul(t1) < tierMul(t0) ? 'num dn' : ''}">×${tierMul(t1)}</b></span>${worst ? `<span class="warn">${L('기절해서 지면 압수 1순위가 된다', 'First to be confiscated if you get knocked out')}</span>` : ''}</div>
+    <div class="btnRow"><button id="shopAct" class="primary" ${on || (!own && c.gold < it.price) ? 'disabled' : ''}>${on ? L('들고 있음', 'Equipped') : own ? L('바로 들기', 'Equip') : L(`🪙 ${it.price} 사고 바로 들기`, `🪙 ${it.price} Buy & equip`)}</button></div>`;
   $('shopAct').onclick = () => { if (!own && !buy(c, sel)) return; equip(c, sel); save(); audio.play('chime', [660, 990]); buildDisplay(); renderShop(); };
 }
 // 전직관: 1차는 네 원소 카드, 2차는 내 원소. 고르면 시험 설명, 1차는 시험 전에 질문 하나
@@ -728,35 +737,35 @@ function goJobs() {
   renderJobs(tier);
 }
 function renderJobs(tier) {
-  $('jobsBadge').textContent = tier === 1 ? '견습 졸업' : '2차 전직';
-  $('jobsNote').textContent = tier === 1 ? '첫 시합을 이겼다! 네 원소 중 하나를 고른다' : '랭크 결정전을 이겼다! 큰 마법을 배운다';
-  $('jobsNpc').innerHTML = '<b>전직관 노마법사</b>' + (tier === 1 ? '마력은 결국 말의 속도다. 불은 겁주고, 물은 당기고, 바람은 밀고, 땅은 막는다. 어느 쪽으로 쓸 테냐?' : `이제 두 번째 마법이다. 큰 마법은 ${input.st.touch ? '큰 마법 버튼' : 'Q'}다.`);
+  $('jobsBadge').textContent = tier === 1 ? L('견습 졸업', 'Apprentice graduate') : L('2차 전직', '2nd advancement');
+  $('jobsNote').textContent = tier === 1 ? L('첫 시합을 이겼다! 네 원소 중 하나를 고른다', 'You won your first fight! Pick one of the four elements') : L('랭크 결정전을 이겼다! 큰 마법을 배운다', 'You won the rank decider! Learn your big spell');
+  $('jobsNpc').innerHTML = L('<b>전직관 노마법사</b>', '<b>Old Mage of the Hall</b> ') + (tier === 1 ? L('마력은 결국 말의 속도다. 불은 겁주고, 물은 당기고, 바람은 밀고, 땅은 막는다. 어느 쪽으로 쓸 테냐?', 'Mana is, in the end, the speed of your horse. Fire frightens, water pulls, wind pushes, earth blocks. Which will you wield?') : L(`이제 두 번째 마법이다. 큰 마법은 ${input.st.touch ? '큰 마법 버튼' : 'Q'}다.`, `Now for your second spell. Your big spell is ${input.st.touch ? 'the Big spell button' : 'Q'}.`));
   const list = tier === 1 ? JOB_ORDER : [career.job];
   $('jobCards').innerHTML = list.map((k) => {
     const Jk = JOBS[k], [s1, s2] = Jk.spells, strong = JOB_ORDER.find((x) => JOBS[x].beats === k), tr = trialFor(k, tier);
     return `<div class="job${k === jobPick ? ' sel' : ''}" data-job="${k}"><div class="jh"><div class="ic" style="background:${Jk.css}">${Jk.icon}</div><div><b>${Jk.name}</b><span class="sp">${Jk.role}</span></div></div>
-      <div class="sk"><span class="t">1차</span>${SPELLS[s1].icon} ${SPELLS[s1].name}</div><div class="sk${tier === 1 ? ' lock' : ''}"><span class="t">2차</span>${SPELLS[s2].icon} ${SPELLS[s2].name}</div>
-      <div class="ln"><span class="k">📏 거리</span>${Jk.range}</div><div class="ln"><span class="k">전직 보너스</span><span class="up">${Jk.bonusTxt}</span></div>
-      <div class="ln"><span class="w">▲ ${JOBS[Jk.beats].short}에 강함</span><br><span class="l">▼ ${JOBS[strong].short}에 약함</span></div>
-      <div class="ln"><span class="k">📜 시험</span>「${tr.title}」</div>${tier === 1 ? `<div class="pick">${k === jobPick ? '✓ 고름' : '눌러서 고르기'}</div>` : ''}</div>`;
+      <div class="sk"><span class="t">${L('1차', '1st')}</span>${SPELLS[s1].icon} ${SPELLS[s1].name}</div><div class="sk${tier === 1 ? ' lock' : ''}"><span class="t">${L('2차', '2nd')}</span>${SPELLS[s2].icon} ${SPELLS[s2].name}</div>
+      <div class="ln"><span class="k">${L('📏 거리', '📏 Range')}</span>${Jk.range}</div><div class="ln"><span class="k">${L('전직 보너스', 'Advancement bonus')}</span><span class="up">${Jk.bonusTxt}</span></div>
+      <div class="ln"><span class="w">${L(`▲ ${JOBS[Jk.beats].short}에 강함`, `▲ Strong vs ${JOBS[Jk.beats].short}`)}</span><br><span class="l">${L(`▼ ${JOBS[strong].short}에 약함`, `▼ Weak vs ${JOBS[strong].short}`)}</span></div>
+      <div class="ln"><span class="k">${L('📜 시험', '📜 Trial')}</span>${L('「', '“')}${tr.title}${L('」', '”')}</div>${tier === 1 ? `<div class="pick">${k === jobPick ? L('✓ 고름', '✓ Picked') : L('눌러서 고르기', 'Tap to pick')}</div>` : ''}</div>`;
   }).join('');
   if (tier === 2) jobPick = career.job;
   for (const el of $('jobCards').querySelectorAll('.job')) el.onclick = () => { if (tier !== 1) return; jobPick = el.dataset.job; audio.play('click'); renderJobs(tier); };
   const tr = jobPick ? trialFor(jobPick, tier) : null;
-  if (!tr) { $('jobTrial').innerHTML = '<div class="note">카드를 눌러 원소를 고른다</div>'; return; }
+  if (!tr) { $('jobTrial').innerHTML = `<div class="note">${L('카드를 눌러 원소를 고른다', 'Tap a card to pick an element')}</div>`; return; }
   const tries = career.trials[tr.id] || 0, Jk = JOBS[jobPick], spell = SPELLS[Jk.spells[tier - 1]];
-  $('jobTrial').innerHTML = `<h3>${Jk.icon} ${Jk.name} ${tier}차 시험: ${tr.title}<span class="tag">${tr.time}초</span></h3><div>${tr.goal}</div>
-    ${tries >= 2 ? `<div class="hint">💡 ${tr.hint} · 이번엔 조건을 낮춘다</div>` : ''}
-    <div class="rule"><span class="ok">통과하면 ${tier === 1 ? Jk.name + ' + ' : ''}${spell.icon} ${spell.name}${tier === 1 ? ' + ' + Jk.bonusTxt : ''}</span><span>실패해도 잃는 것 없이 다시</span>${tier === 1 ? '<span class="warn">통과하면 원소가 정해진다 · 그 전엔 카드를 눌러 바꿀 수 있다</span>' : ''}</div>
-    <div class="btnRow"><button id="trialGo" class="primary">📜 시험 보러 가기</button></div>`;
+  $('jobTrial').innerHTML = `<h3>${Jk.icon} ${Jk.name} ${L(`${tier}차 시험`, `Tier ${tier} Trial`)}: ${tr.title}<span class="tag">${tr.time}${L('초', 's')}</span></h3><div>${tr.goal}</div>
+    ${tries >= 2 ? `<div class="hint">💡 ${tr.hint} · ${L('이번엔 조건을 낮춘다', 'the goal is eased this time')}</div>` : ''}
+    <div class="rule"><span class="ok">${L('통과하면', 'Pass to get')} ${tier === 1 ? Jk.name + ' + ' : ''}${spell.icon} ${spell.name}${tier === 1 ? ' + ' + Jk.bonusTxt : ''}</span><span>${L('실패해도 잃는 것 없이 다시', 'Failing costs nothing — try again')}</span>${tier === 1 ? `<span class="warn">${L('통과하면 원소가 정해진다 · 그 전엔 카드를 눌러 바꿀 수 있다', 'Passing locks in your element · until then you can switch cards')}</span>` : ''}</div>
+    <div class="btnRow"><button id="trialGo" class="primary">${L('📜 시험 보러 가기', '📜 Take the Trial')}</button></div>`;
   $('trialGo').onclick = () => { audio.play('click'); if (tier === 1 && !quizDone) { showQuiz(tr); return; } beginTrial(tr); };
 }
 function showQuiz(tr) {
   const q = $('jobsQuiz'); q.classList.remove('hidden');
-  q.innerHTML = '<b>전직관</b>시험 전에 하나만 묻자. 마력은 어디서 나오지?<div class="btnRow">' + ['지팡이', '말의 속도', '모자'].map((a) => `<button data-a="${a}">${a}</button>`).join('') + '</div>';
+  q.innerHTML = L('<b>전직관</b>시험 전에 하나만 묻자. 마력은 어디서 나오지?', '<b>Advancement Hall</b> One question before the trial. Where does mana come from?') + '<div class="btnRow">' + [['staff', L('지팡이', 'The staff')], ['speed', L('말의 속도', 'The horse’s speed')], ['hat', L('모자', 'The hat')]].map(([id, lb]) => `<button data-a="${id}">${lb}</button>`).join('') + '</div>';
   for (const b of q.querySelectorAll('button')) b.onclick = () => {
-    const ok = b.dataset.a === '말의 속도'; quizDone = true; audio.play(ok ? 'chime' : 'click', ok ? [660, 990] : undefined);
-    q.innerHTML = `<b>전직관</b>${ok ? '맞다.' : '아니다.'} 말이 빠를수록 마력이 크고, 마법을 쓰면 그만큼 느려진다. 자, 가 봐라.<div class="btnRow"><button id="quizGo" class="primary">📜 시험 시작</button></div>`;
+    const ok = b.dataset.a === 'speed'; quizDone = true; audio.play(ok ? 'chime' : 'click', ok ? [660, 990] : undefined);
+    q.innerHTML = `${L('<b>전직관</b>', '<b>Advancement Hall</b> ')}${ok ? L('맞다.', 'Correct.') : L('아니다.', 'Wrong.')} ${L('말이 빠를수록 마력이 크고, 마법을 쓰면 그만큼 느려진다. 자, 가 봐라.', 'The faster the horse, the more mana — and every spell slows you by that much. Off you go.')}<div class="btnRow"><button id="quizGo" class="primary">${L('📜 시험 시작', '📜 Start Trial')}</button></div>`;
     $('quizGo').onclick = () => { q.classList.add('hidden'); beginTrial(tr); };
   };
 }
@@ -774,18 +783,18 @@ function goHub() {
 }
 function goPre(fight) {
   fightDef = fight; mode = 'pre'; kind = 'gauntlet'; show('pre');
-  $('preMode').textContent = fight.mode === 'duel' ? '1대1 결투' : `${fight.opp.length + 1}인 난투`;
+  $('preMode').textContent = fight.mode === 'duel' ? L('1대1 결투', '1-on-1 duel') : L(`${fight.opp.length + 1}인 난투`, `${fight.opp.length + 1}-rider brawl`);
   $('preTitle').textContent = fight.title;
   $('preOpps').innerHTML = fight.opp.map((id) => oppChip(id, fight)).join('');
   $('preLine').innerHTML = `<b>${fight.line[0]}</b>${fight.line[1]}`;
   const tips = [];
-  if (fight.tutorial) tips.push('첫 시합은 안내가 나와요. 동작은 연습장에서 먼저 해 봐도 좋아요.');
-  if (fight.opp.includes('mukjik')) tips.push('묵직이는 💨 바람 마법사다. 정면으로 오다 붙으면 돌풍으로 날린다. 옆으로 비껴 스쳐라.');
-  if (fight.opp.includes('boss1')) tips.push('돌쇠는 🪨 땅 마법사다. 정면으로 달려들면 흙벽, 질주해 오면 땅가르기. 옆으로 돌아라.');
-  if (fight.opp.includes('beongae')) tips.push('번개는 🔥 불 마법사다. 화염구에 말이 놀라고, 쫓아가면 불길이 깔린다.');
-  if (fight.opp.includes('gihoe')) tips.push('기회주의자는 💧 물 마법사다. 나보다 빠를 때 물채찍으로 끌어당긴다. 더 빨리 달려라.');
-  if (fight.final) tips.push('라이벌은 네 습관을 따라 한다. 평소와 다르게 싸워 봐.');
-  tips.push('기절하면 장비 하나를 압수당한다. 위험하면 ' + (input.st.touch ? '⏸ 메뉴에서 항복.' : '<kbd>G</kbd>를 길게 눌러 항복.'));
+  if (fight.tutorial) tips.push(L('첫 시합은 안내가 나와요. 동작은 연습장에서 먼저 해 봐도 좋아요.', 'The first fight shows on-screen guidance. You can also try the moves in the Practice Yard first.'));
+  if (fight.opp.includes('mukjik')) tips.push(L('묵직이는 💨 바람 마법사다. 정면으로 오다 붙으면 돌풍으로 날린다. 옆으로 비껴 스쳐라.', 'Mukjik is a 💨 Wind mage: charges head-on and blasts you away with a gust when close. Slip past the side.'));
+  if (fight.opp.includes('boss1')) tips.push(L('돌쇠는 🪨 땅 마법사다. 정면으로 달려들면 흙벽, 질주해 오면 땅가르기. 옆으로 돌아라.', 'Dolsoe is an 🪨 Earth mage: an earth wall if you charge head-on, a fissure if you gallop at them. Circle around.'));
+  if (fight.opp.includes('beongae')) tips.push(L('번개는 🔥 불 마법사다. 화염구에 말이 놀라고, 쫓아가면 불길이 깔린다.', 'Beongae is a 🔥 Fire mage: fireballs spook your horse, and chasing leaves fire trails behind.'));
+  if (fight.opp.includes('gihoe')) tips.push(L('기회주의자는 💧 물 마법사다. 나보다 빠를 때 물채찍으로 끌어당긴다. 더 빨리 달려라.', 'Gihoe is a 💧 Water mage: pulls you in with a water whip when faster than you. Ride faster.'));
+  if (fight.final) tips.push(L('라이벌은 네 습관을 따라 한다. 평소와 다르게 싸워 봐.', 'The rival copies your habits. Try fighting differently from usual.'));
+  tips.push(L('기절하면 장비 하나를 압수당한다. 위험하면 ' + (input.st.touch ? '⏸ 메뉴에서 항복.' : '<kbd>G</kbd>를 길게 눌러 항복.'), 'If you get knocked out, a piece of gear is confiscated. In danger? ' + (input.st.touch ? 'Surrender from the ⏸ menu.' : 'Hold <kbd>G</kbd> to surrender.')));
   $('preTip').innerHTML = tips.join('<br>');
 }
 
@@ -836,10 +845,10 @@ function setOrient(o) {
   if (o === 'land') tryFullscreen();
   resize(); orientLabel();
 }
-function orientLabel() { $('orientBtn').classList.toggle('hidden', !input.st.touch); $('orientBtn').textContent = S.orient === 'land' ? '📱 세로로 보기' : '↻ 가로로 보기'; }
+function orientLabel() { $('orientBtn').classList.toggle('hidden', !input.st.touch); $('orientBtn').textContent = S.orient === 'land' ? L('📱 세로로 보기', '📱 Portrait view') : L('↻ 가로로 보기', '↻ Landscape view'); }
 orientLabel();
-if (input.st.touch) $('pauseNote').textContent = '계속을 누르면 이어서 합니다.';
-const TILT = '📱 폰 <b>윗부분이 왼쪽으로</b> 가게 눕혀서 하세요';
+if (input.st.touch) $('pauseNote').textContent = L('계속을 누르면 이어서 합니다.', 'Tap Resume to continue.');
+const TILT = L('📱 폰 <b>윗부분이 왼쪽으로</b> 가게 눕혀서 하세요', '📱 Turn your phone sideways so its <b>top points left</b>');
 $('orientBtn').onclick = () => { audio.play('click'); setOrient(S.orient === 'land' ? 'port' : 'land'); if (vp.rot) hud.toast(TILT, 3); };
 function rotateGo() { const pend = rotPending; rotPending = null; if (pend) beginPlay(pend[0], pend[1]); }
 $('rotStay').onclick = () => { audio.start(); audio.play('click'); setOrient('port'); rotateGo(); };
@@ -853,9 +862,9 @@ function beginPlay(how, custom) {
   view = input.st.touch && vp.h > vp.w ? 'tp' : 'fp';   // 세로 화면은 좁아서 1인칭이면 지팡이가 화면 밖 → 3인칭으로 시작
   hud.legend(!input.st.touch);
   hud.practice(how === 'practice' ? practiceItems() : null);
-  hud.trial(how === 'trial' ? { tag: `${JOBS[trialDef.job].name} ${trialDef.tier}차 시험`, title: trialDef.title, goal: trialDef.goal } : null);
-  if (how === 'trial') hud.trialTip((trialAttempt >= 2 ? '💡 ' : '<b>전직관:</b> ') + trialDef.hint);
-  if (how === 'practice') hud.toast('연습장: 가만히 있는 허수아비와 오른쪽 앞 무기 더미. 왼쪽 목록을 하나씩 해 보세요', 6);
+  hud.trial(how === 'trial' ? { tag: L(`${JOBS[trialDef.job].name} ${trialDef.tier}차 시험`, `${JOBS[trialDef.job].name} Tier ${trialDef.tier} Trial`), title: trialDef.title, goal: trialDef.goal } : null);
+  if (how === 'trial') hud.trialTip((trialAttempt >= 2 ? '💡 ' : L('<b>전직관:</b> ', '<b>Hall:</b> ')) + trialDef.hint);
+  if (how === 'practice') hud.toast(L('연습장: 가만히 있는 허수아비와 오른쪽 앞 무기 더미. 왼쪽 목록을 하나씩 해 보세요', 'Practice Yard: a still scarecrow, and a weapon pile ahead on the right. Try the list on the left one by one'), 6);
   else if (vp.rot) hud.toast(TILT, 3.5);
 }
 function finishFight() {
@@ -867,98 +876,101 @@ function finishFight() {
     save();
     show('result');
     const Jk = JOBS[trialDef.job], spell = SPELLS[Jk.spells[trialDef.tier - 1]];
-    $('resT').textContent = passed ? '전직!' : '다시 해 보자';
+    $('resT').textContent = passed ? L('전직!', 'Advanced!') : L('다시 해 보자', 'Try again');
     $('resT').className = 'bigT ' + (passed ? 'win' : 'lose');
-    $('resSub').textContent = `${Jk.name} ${trialDef.tier}차 시험 「${trialDef.title}」 · ${Math.floor(r.t)}초`;
+    $('resSub').textContent = L(`${Jk.name} ${trialDef.tier}차 시험 「${trialDef.title}」 · ${Math.floor(r.t)}초`, `${Jk.name} Tier ${trialDef.tier} Trial “${trialDef.title}” · ${Math.floor(r.t)}s`);
     statsHTML(r); testLine(r);
     const tries = career.trials[trialDef.id] || 0;
-    $('resRewards').innerHTML = passed ? `${Jk.icon} <b>${Jk.name}</b> ${trialDef.tier}차 · ${spell.icon} <b>${spell.name}</b>을 배웠다${trialDef.tier === 1 ? ` · ${Jk.bonusTxt}` : ' · 큰 마법은 ' + (input.st.touch ? '큰 마법 버튼' : 'Q')}`
-      : `잃은 것은 없다.${tries >= 2 ? ' 다음엔 힌트를 주고 조건을 낮춘다.' : ''}`;
+    $('resRewards').innerHTML = passed ? L(`${Jk.icon} <b>${Jk.name}</b> ${trialDef.tier}차 · ${spell.icon} <b>${spell.name}</b>을 배웠다${trialDef.tier === 1 ? ` · ${Jk.bonusTxt}` : ' · 큰 마법은 ' + (input.st.touch ? '큰 마법 버튼' : 'Q')}`, `${Jk.icon} <b>${Jk.name}</b> Tier ${trialDef.tier} · learned ${spell.icon} <b>${spell.name}</b>${trialDef.tier === 1 ? ` · ${Jk.bonusTxt}` : ' · big spell on ' + (input.st.touch ? 'the Big spell button' : 'Q')}`)
+      : L(`잃은 것은 없다.${tries >= 2 ? ' 다음엔 힌트를 주고 조건을 낮춘다.' : ''}`, `Nothing lost.${tries >= 2 ? ' Next time you get a hint and an easier goal.' : ''}`);
     $('lootBox').classList.add('hidden');
-    $('resRetry').textContent = passed ? '마구간으로' : '다시 도전'; $('resHub').textContent = passed ? '마구간으로' : trialDef.tier === 1 ? '다른 원소 고르기' : '전직관으로';
+    $('resRetry').textContent = passed ? L('마구간으로', 'To the Stable') : L('다시 도전', 'Try again'); $('resHub').textContent = passed ? L('마구간으로', 'To the Stable') : trialDef.tier === 1 ? L('다른 원소 고르기', 'Pick another element') : L('전직관으로', 'To the Hall');
     lastResult = { r, rewards: { won: passed }, trial: true, passed };
     audio.play(passed ? 'fanfare' : 'sad');
     return;
   }
   if (kind === 'free') {
     show('result');
-    $('resT').textContent = r.playerWon ? '승리!' : r.reason === 'surrender' ? '항복' : '패배';
+    $('resT').textContent = r.playerWon ? L('승리!', 'Victory!') : r.reason === 'surrender' ? L('항복', 'Surrendered') : L('패배', 'Defeat');
     $('resT').className = 'bigT ' + (r.playerWon ? 'win' : 'lose');
-    $('resSub').textContent = '자유 대전 · ' + Math.floor(r.t) + '초';
+    $('resSub').textContent = L('자유 대전 · ' + Math.floor(r.t) + '초', 'Free Battle · ' + Math.floor(r.t) + 's');
     statsHTML(r); testLine(r);
-    $('resRewards').innerHTML = '자유 대전은 보상이 없다.';
+    $('resRewards').innerHTML = L('자유 대전은 보상이 없다.', 'Free Battle gives no rewards.');
     $('lootBox').classList.add('hidden');
-    $('resRetry').textContent = '한 판 더'; $('resHub').textContent = '처음 화면';
+    $('resRetry').textContent = L('한 판 더', 'One more'); $('resHub').textContent = L('처음 화면', 'Title');
     lastResult = { r, rewards: { won: r.playerWon }, free: true };
     if (r.playerWon) audio.play('fanfare'); else audio.play('sad');
     return;
   }
-  $('resHub').textContent = '마구간으로';
+  $('resHub').textContent = L('마구간으로', 'To the Stable');
   const prevRank = career.rank;
   const { career: c2, rewards } = applyResult(career, fightDef, r);
   career = c2; save();
   lastResult = { r, rewards, fight: fightDef };
   show('result');
   const won = r.playerWon;
-  $('resT').textContent = won ? (rewards.rankUp ? '랭크 업!' : '승리!') : rewards.surrendered ? '항복' : '패배';
+  $('resT').textContent = won ? (rewards.rankUp ? L('랭크 업!', 'Rank up!') : L('승리!', 'Victory!')) : rewards.surrendered ? L('항복', 'Surrendered') : L('패배', 'Defeat');
   $('resT').className = 'bigT ' + (won ? 'win' : 'lose');
-  const why = { last: won ? '말 위에 마지막까지 남았다' : '다른 기수가 끝까지 남았다', ko: '정신을 잃었다', time: won ? '판정승 (말 위에 남아 있었다)' : '판정패', surrender: '항복했다. 잃은 것은 없다' }[r.reason] || '';
-  $('resSub').textContent = why + ` · ${Math.floor(r.t)}초`;
+  const why = { last: won ? L('말 위에 마지막까지 남았다', 'Last one standing on horseback') : L('다른 기수가 끝까지 남았다', 'Another rider stayed up to the end'), ko: L('정신을 잃었다', 'You were knocked out'), time: won ? L('판정승 (말 위에 남아 있었다)', 'Won on points (still mounted)') : L('판정패', 'Lost on points'), surrender: L('항복했다. 잃은 것은 없다', 'You surrendered. Nothing lost') }[r.reason] || '';
+  $('resSub').textContent = why + L(` · ${Math.floor(r.t)}초`, ` · ${Math.floor(r.t)}s`);
   statsHTML(r); testLine(r);
   const lines = [];
-  if (won) lines.push(`<b>+${rewards.points}점</b> · 🪙 +${rewards.gold}`);
-  if (rewards.rankUp && career.rank > prevRank) lines.push(`🏅 새 랭크: <b>${rankName(career.rank)}</b>`);
-  if (rewards.confiscated) lines.push(`😢 기절해서 <b>${J(ITEMS[rewards.confiscated].name, '을/를')}</b> 압수당했다`);
-  if (!won && !rewards.confiscated && !rewards.surrendered) lines.push('압수당할 장비가 없었다 (기본 장비뿐)');
-  lines.push(`지금 랭크 포인트 ${career.points} / ${currentFights(career).rank.unlock} · 금화 ${career.gold}`);
+  if (won) lines.push(L(`<b>+${rewards.points}점</b> · 🪙 +${rewards.gold}`, `<b>+${rewards.points} pts</b> · 🪙 +${rewards.gold}`));
+  if (rewards.rankUp && career.rank > prevRank) lines.push(L(`🏅 새 랭크: <b>${rankName(career.rank)}</b>`, `🏅 New rank: <b>${rankName(career.rank)}</b>`));
+  if (rewards.confiscated) lines.push(L(`😢 기절해서 <b>${J(ITEMS[rewards.confiscated].name, '을/를')}</b> 압수당했다`, `😢 Knocked out — <b>${ITEMS[rewards.confiscated].name}</b> was confiscated`));
+  if (!won && !rewards.confiscated && !rewards.surrendered) lines.push(L('압수당할 장비가 없었다 (기본 장비뿐)', 'No gear to confiscate (starter gear only)'));
+  lines.push(L(`지금 랭크 포인트 ${career.points} / ${currentFights(career).rank.unlock} · 금화 ${career.gold}`, `Rank points ${career.points} / ${currentFights(career).rank.unlock} · Gold ${career.gold}`));
   $('resRewards').innerHTML = lines.join('<br>');
   const loot = rewards.loot.filter((o) => o.item || o.gold);
   $('lootBox').classList.toggle('hidden', !won || !loot.length);
   const box = $('loot'); box.innerHTML = '';
   for (const o of loot) {
     const b = document.createElement('button');
-    b.innerHTML = o.item ? `${ITEMS[o.item].name}<br><small style="font-family:Gowun Dodum">${CHARS[o.from].name}의 것 · ${itemDesc(o.item)}</small>` : `🪙 금화 ${o.gold}`;
-    b.onclick = () => { takeLoot(career, o); save(); audio.play('chime', [523, 784]); box.innerHTML = `<div class="note">${o.item ? J(ITEMS[o.item].name, '을/를') + ' 챙겼다. 마구간에서 장착할 수 있다' : '금화를 챙겼다'}</div>`; };
+    b.innerHTML = o.item ? `${ITEMS[o.item].name}<br><small style="font-family:Gowun Dodum">${L(`${CHARS[o.from].name}의 것`, `${CHARS[o.from].name}’s`)} · ${itemDesc(o.item)}</small>` : L(`🪙 금화 ${o.gold}`, `🪙 ${o.gold} gold`);
+    b.onclick = () => { takeLoot(career, o); save(); audio.play('chime', [523, 784]); box.innerHTML = `<div class="note">${o.item ? L(J(ITEMS[o.item].name, '을/를') + ' 챙겼다. 마구간에서 장착할 수 있다', 'Took ' + ITEMS[o.item].name + '. You can equip it at the Stable') : L('금화를 챙겼다', 'Took the gold')}</div>`; };
     box.appendChild(b);
   }
-  $('resRetry').textContent = rewards.rankUp ? '다음 상대 보기' : '한 판 더';
+  $('resRetry').textContent = rewards.rankUp ? L('다음 상대 보기', 'See next rival') : L('한 판 더', 'One more');
   if (won) audio.play('fanfare'); else audio.play('sad');
 }
 function statsHTML(r) {
   const me = r.fighters[0], s = me.stats, fearAvg = s.fearN > 0 ? Math.round(s.fearSum / s.fearN) : 0;
-  $('resStats').innerHTML = `<div><b>${s.unhorsed}</b>낙마시킴</div><div><b>${s.kos}</b>기절시킴</div><div><b>${s.deflectHits}</b>되받아쳐 맞힘</div><div><b>${s.hits}</b>타격</div><div><b>${s.disarms}</b>무장 해제</div><div><b>${s.grabs}</b>잡기</div><div><b>${s.casts}</b>마법 (평균 ${s.casts ? Math.round(s.chargeSum / s.casts * 100) : 0}%)</div><div><b>${s.kicks}</b>발차기</div><div><b>${fearAvg}</b>고집이 평균 공포</div>`;
+  $('resStats').innerHTML = `<div><b>${s.unhorsed}</b>${L('낙마시킴', 'Unhorsed')}</div><div><b>${s.kos}</b>${L('기절시킴', 'KOs')}</div><div><b>${s.deflectHits}</b>${L('되받아쳐 맞힘', 'Deflect hits')}</div><div><b>${s.hits}</b>${L('타격', 'Strikes')}</div><div><b>${s.disarms}</b>${L('무장 해제', 'Disarms')}</div><div><b>${s.grabs}</b>${L('잡기', 'Grabs')}</div><div><b>${s.casts}</b>${L('마법 (평균', 'Casts (avg')} ${s.casts ? Math.round(s.chargeSum / s.casts * 100) : 0}%)</div><div><b>${s.kicks}</b>${L('발차기', 'Kicks')}</div><div><b>${fearAvg}</b>${L('고집이 평균 공포', 'Stubborn’s avg fear')}</div>`;
 }
 // 시험 기록 한 줄: 기기·조작·시점, 상대, 결과, 내가 한 것과 당한 것, 프레임. 시험해 주는 사람이 카톡에 붙여 보낸다
 function testLine(r) {
   const s = r.fighters[0].stats, t = tst || { n: 0, sum: 0, slow: 0, casts: 0, fast: 0, fell: 0, koMe: 0, taken: 0 };
   const opp = match.fighters.filter((f) => f !== player).map((f) => f.ch.name).join('·');
-  const res = r.playerWon ? '승' : r.reason === 'surrender' ? '항복' : '패';
+  const res = r.playerWon ? L('승', 'Win') : r.reason === 'surrender' ? L('항복', 'Surrender') : L('패', 'Loss');
   const ms = t.n ? (t.sum / t.n * 1000).toFixed(1) : '-', slow = t.n ? Math.round(t.slow / t.n * 100) : 0;
   const d = new Date(), day = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const jb = player && player.job ? `${JOBS[player.job].short}${player.jobTier}` : '견습', sp = Object.entries(s.spells || {}).map(([k, v]) => `${SPELLS[k] ? SPELLS[k].name : k}${v}`).join(' ');
-  const line = `[마상 시험 ${VERSION}] ${day} · ${input.st.touch ? '폰' : 'PC'}·${S.adv ? '고급' : '쉬운'} 조작·${view === 'fp' ? '1인칭' : '3인칭'} · ${jb}${kind === 'trial' && trialDef ? ' 시험 ' + trialDef.id : ''} · vs ${opp} · ${res} ${Math.floor(r.t)}초`
+  const jb = player && player.job ? `${JOBS[player.job].short}${player.jobTier}` : L('견습', 'Apprentice'), sp = Object.entries(s.spells || {}).map(([k, v]) => `${SPELLS[k] ? SPELLS[k].name : k}${v}`).join(' ');
+  const line = L(`[마상 시험 ${VERSION}] ${day} · ${input.st.touch ? '폰' : 'PC'}·${S.adv ? '고급' : '쉬운'} 조작·${view === 'fp' ? '1인칭' : '3인칭'} · ${jb}${kind === 'trial' && trialDef ? ' 시험 ' + trialDef.id : ''} · vs ${opp} · ${res} ${Math.floor(r.t)}초`
     + ` | 마법 ${t.casts}(질주 중 ${t.fast})${sp ? ' [' + sp + ']' : ''} · 타격 ${s.hits} · 맞음 ${t.taken} · 낙마시킴 ${s.unhorsed} · 낙마당함 ${t.fell} · 기절시킴 ${s.kos} · 되받아침 ${s.deflectHits}`
-    + ` | 프레임 평균 ${ms}ms, 느린 프레임 ${slow}%`;
-  $('resTest').textContent = line; $('resCopy').textContent = '📋 시험 기록 복사';
+    + ` | 프레임 평균 ${ms}ms, 느린 프레임 ${slow}%`,
+  `[MW test ${VERSION}] ${day} · ${input.st.touch ? 'Phone' : 'PC'} · ${S.adv ? 'Advanced' : 'Easy'} controls · ${view === 'fp' ? '1st' : '3rd'} person · ${jb}${kind === 'trial' && trialDef ? ' trial ' + trialDef.id : ''} · vs ${opp} · ${res} ${Math.floor(r.t)}s`
+    + ` | casts ${t.casts} (${t.fast} while galloping)${sp ? ' [' + sp + ']' : ''} · strikes ${s.hits} · hit taken ${t.taken} · unhorsed ${s.unhorsed} · fell ${t.fell} · KOs ${s.kos} · deflects ${s.deflectHits}`
+    + ` | frame avg ${ms}ms, slow frames ${slow}%`);
+  $('resTest').textContent = line; $('resCopy').textContent = L('📋 시험 기록 복사', '📋 Copy test log');
 }
 $('resCopy').onclick = () => {
-  const el = $('resTest'), txt = el.textContent, done = () => { $('resCopy').textContent = '복사했다 ✓'; };
-  const pick = () => { const rg = document.createRange(); rg.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); $('resCopy').textContent = '선택했다 → 길게 눌러 복사'; };
+  const el = $('resTest'), txt = el.textContent, done = () => { $('resCopy').textContent = L('복사했다 ✓', 'Copied ✓'); };
+  const pick = () => { const rg = document.createRange(); rg.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); $('resCopy').textContent = L('선택했다 → 길게 눌러 복사', 'Selected → long-press to copy'); };
   try { navigator.clipboard.writeText(txt).then(done, pick); } catch (e) { pick(); }
 };
 function endingScreen() {
   show('ending');
   const pair = career.ending === 'pair';
-  $('endT').textContent = pair ? '엔딩: 한 쌍' : '엔딩: 빚 갚은 챔피언';
+  $('endT').textContent = pair ? L('엔딩: 한 쌍', 'Ending: A Pair') : L('엔딩: 빚 갚은 챔피언', 'Ending: The Debt-Free Champion');
   $('endBody').innerHTML = pair
-    ? '고집이는 끝까지 겁먹지 않았다. 마지가 마법을 아낄 줄 알았기 때문이다.<br>상금으로 목장 빚을 갚고, 둘은 다음 봄 시합장으로 함께 떠난다.'
-    : '빚은 갚았다. 하지만 폭발 소리에 질린 고집이는 더 이상 달리려 하지 않는다.<br>마지는 트로피 대신 고집이의 갈기를 오래 쓰다듬었다. (공포를 덜 쌓으면 다른 엔딩이 있다)';
+    ? L('고집이는 끝까지 겁먹지 않았다. 마지가 마법을 아낄 줄 알았기 때문이다.<br>상금으로 목장 빚을 갚고, 둘은 다음 봄 시합장으로 함께 떠난다.', 'Stubborn never lost its nerve, because Maji knew how to spare magic.<br>With the prize money they clear the ranch’s debt and ride off together to the next spring tournament field.')
+    : L('빚은 갚았다. 하지만 폭발 소리에 질린 고집이는 더 이상 달리려 하지 않는다.<br>마지는 트로피 대신 고집이의 갈기를 오래 쓰다듬었다. (공포를 덜 쌓으면 다른 엔딩이 있다)', 'The debt is paid. But Stubborn, shaken by the blasts, no longer wants to run.<br>Instead of the trophy, Maji spent a long while stroking Stubborn’s mane. (Pile up less fear for a different ending.)');
 }
 let paused = false, settingsFrom = null;
 function pause(on) {
   if (mode !== 'fight') return;
   paused = on;
-  if (on) { show('pause'); input.exitLock(); $('giveBtn').textContent = kind === 'practice' ? '연습 끝내기' : kind === 'trial' ? '🏳 시험 그만두기 (잃는 것 없음)' : '🏳 항복 (잃는 것 없음)'; }
+  if (on) { show('pause'); input.exitLock(); $('giveBtn').textContent = kind === 'practice' ? L('연습 끝내기', 'End practice') : kind === 'trial' ? L('🏳 시험 그만두기 (잃는 것 없음)', '🏳 Quit trial (nothing lost)') : L('🏳 항복 (잃는 것 없음)', '🏳 Surrender (nothing lost)'); }
   else { show(null); input.requestLock(); }
 }
 input.st.onLockChange = (locked) => { if (!locked && mode === 'fight' && !paused && endTimer < 0 && !input.st.touch && !input.st.lockFailed && !replay) pause(true); };
@@ -989,7 +1001,7 @@ $('freeBtn').onclick = () => { audio.start(); audio.play('click'); openFree(); }
 $('freeBack').onclick = () => show('title');
 $('freeGo').onclick = () => {
   const opp = FREE_OPPS.filter((id) => $('fo_' + id).checked).slice(0, 3);
-  if (!opp.length) { $('freeOpps').insertAdjacentHTML('afterend', '<div class="note" id="freeWarn">상대를 한 명 이상 고르세요</div>'); return; }
+  if (!opp.length) { $('freeOpps').insertAdjacentHTML('afterend', `<div class="note" id="freeWarn">${L('상대를 한 명 이상 고르세요', 'Pick at least one rival')}</div>`); return; }
   const loadout = {}; for (const slot of ['staff', 'hat', 'robe', 'gear']) loadout[slot] = document.querySelector(`input[name="fg_${slot}"]:checked`).value;
   freeSpec = { opp, loadout };
   audio.play('click'); beginPlay('free', freeSpec);
@@ -998,7 +1010,7 @@ $('practiceBtn').onclick = () => { audio.play('click'); beginPlay('practice'); }
 
 // 버튼
 $('startBtn').onclick = () => { audio.start(); audio.play('click'); goHub(); };
-if (hasSave && career.log.length) $('startBtn').textContent = '🐴 건틀릿 (이어서)';
+if (hasSave && career.log.length) $('startBtn').textContent = L('🐴 건틀릿 (이어서)', '🐴 Gauntlet (continue)');
 $('titleBtn').onclick = () => goTitle();
 $('fightBtn').onclick = () => { audio.play('click'); if (jobOffer(career)) goJobs(); else goPre(currentFights(career).next); };
 $('shopBtn').onclick = () => { audio.play('click'); openShop('staff'); };
@@ -1009,8 +1021,11 @@ $('jobsBack').onclick = () => { audio.play('click'); goHub(); };
 $('bossBtn').onclick = () => { audio.play('click'); goPre(currentFights(career).boss); };
 $('resetBtn').onclick = () => { if (confirmReset()) { career = newCareer(); save(); renderHub(); buildDisplay(); } };
 let resetArm = 0;
-function confirmReset() { const now = performance.now(); if (now - resetArm < 2500) return true; resetArm = now; $('resetBtn').textContent = '한 번 더 누르면 초기화'; setTimeout(() => { $('resetBtn').textContent = '처음부터'; }, 2500); return false; }
-$('muteBtn').onclick = () => { const mu = audio.toggleMute(); $('muteBtn').textContent = mu ? '🔇 소리 끔' : '🔊 소리'; };
+let resetOrig = '';
+function confirmReset() { const now = performance.now(); if (now - resetArm < 2500) return true; resetArm = now; resetOrig = $('resetBtn').textContent; $('resetBtn').textContent = L('한 번 더 누르면 초기화', 'Press again to reset'); setTimeout(() => { $('resetBtn').textContent = resetOrig; }, 2500); return false; }
+$('muteBtn').onclick = () => { const mu = audio.toggleMute(); $('muteBtn').textContent = mu ? L('🔇 소리 끔', '🔇 Sound off') : L('🔊 소리', '🔊 Sound'); };
+// 언어 바꾸기 단추: data-setlang="ko" 또는 "en" 이 붙은 요소를 누르면 그 언어로 새로 고친다 (index.html 쪽 단추가 쓴다)
+for (const el of document.querySelectorAll('[data-setlang]')) el.onclick = () => { audio.play('click'); setLang(el.dataset.setlang); };
 $('goBtn').onclick = () => { audio.play('click'); beginPlay('fight'); };
 $('backBtn').onclick = () => goHub();
 $('resHub').onclick = () => { if (lastResult && lastResult.trial) { if (lastResult.passed) goHub(); else goJobs(); return; } if (lastResult && lastResult.free) { goTitle(); return; } if (lastResult && lastResult.rewards.ending) endingScreen(); else goHub(); };
@@ -1047,7 +1062,7 @@ function practiceTurret(dt) {
   const to = { x: tb.x, y: tb.y + 0.9, z: tb.z }, d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
   const sp = 24, vel = { x: (to.x - from.x) / d * sp, y: (to.y - from.y) / d * sp, z: (to.z - from.z) / d * sp };
   match.spells.push({ id: match.nextSpellId++, owner: 1, pos: from, vel, r: 0.22, E: 3000, age: 0, deflects: 0, grace: 0, frac: 0.2, lastDeflector: -1 });
-  hud.toast('🔮 연습용 마법이 날아온다! 지팡이로 후려쳐 보세요', 1.8, 'turret');
+  hud.toast(L('🔮 연습용 마법이 날아온다! 지팡이로 후려쳐 보세요', '🔮 A practice spell is coming! Swat it with your staff'), 1.8, 'turret');
 }
 function hooves(k, s, hb) {
   const dtv = lastDt;
@@ -1092,7 +1107,7 @@ function frame(now) {
   // 화면 효과를 켰는데 시합 중에 3초 넘게 느리면(평균 28ms, 약 35fps 아래) 끄고 알린다
   if (post && S.gfx === 'high' && mode === 'fight' && !paused && !replay) {
     gfxEma += (dt - gfxEma) * 0.02; gfxT += dt;
-    if (gfxT > 3 && gfxEma > 0.028) { S.gfx = 'normal'; saveSettings(); hud.toast('화면이 느려서 「화면 효과」를 껐어요 · 설정에서 다시 켤 수 있어요', 3.5, 'gfx'); }
+    if (gfxT > 3 && gfxEma > 0.028) { S.gfx = 'normal'; saveSettings(); hud.toast(L('화면이 느려서 「화면 효과」를 껐어요 · 설정에서 다시 켤 수 있어요', 'The screen was slow, so “Effects” was turned off · you can turn it back on in Settings'), 3.5, 'gfx'); }
   } else { gfxEma = 1 / 60; gfxT = 0; }
   const t = now / 1000;
   replayCd = Math.max(0, replayCd - dt);
@@ -1147,13 +1162,13 @@ function frame(now) {
     // 카운트다운
     if (match.t < 0.2 && mode === 'fight') {
       const cnt = match.t < 0 ? Math.ceil(-match.t) : 0;
-      if (cnt !== lastCount) { lastCount = cnt; hud.center(cnt > 0 ? String(cnt) : '시작!', 0.9); audio.play('count', cnt === 0); }
+      if (cnt !== lastCount) { lastCount = cnt; hud.center(cnt > 0 ? String(cnt) : L('시작!', 'Go!'), 0.9); audio.play('count', cnt === 0); }
     }
     if (mode === 'fight') {
       if (match.over && endTimer < 0) {
         endTimer = 0; input.exitLock();
         const won = match.result.playerWon;
-        hud.center(won ? '승리!' : match.result.reason === 'surrender' ? '항복' : '패배…', 2.5);
+        hud.center(won ? L('승리!', 'Victory!') : match.result.reason === 'surrender' ? L('항복', 'Surrendered') : L('패배…', 'Defeat…'), 2.5);
         audio.play('cheer', won ? 1.4 : 0.6); arena.setCheer(won ? 1 : 0.4);
         // 마지막 결정타를 다시 보여 준다
         if (S.replay && lastBig && match.tick - lastBig.tick < 150 && match.result.reason !== 'surrender') { const lb = lastBig; setTimeout(() => { if (match && mode === 'fight') startReplay(lb.focus, lb.tick, () => { endTimer = 2.2; }); }, 900); }

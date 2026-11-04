@@ -33,7 +33,7 @@ test('200점이면 결정전이 열리고, 결정전 승리 → 랭크 업(점�
   assert.ok(currentFights(c).bossOpen);
   const r = applyResult(c, LADDER[0].boss, result({ won: true }));
   assert.ok(r.rewards.rankUp); assert.equal(r.career.rank, 1); assert.equal(r.career.points, 0);
-  assert.equal(currentFights(r.career).rank.name, '시골 기수');
+  assert.equal(currentFights(r.career).rank.name, LADDER[1].name);
 });
 
 test('기절 패배 → 가장 비싼 착용 장비 압수, 항복 → 잃는 것 없음', () => {

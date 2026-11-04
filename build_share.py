@@ -8,7 +8,7 @@ ROOT = os.path.abspath(os.environ.get('MW_ROOT') or os.path.join(HERE, '..', '..
 read = lambda *p: open(os.path.join(HERE, *p), encoding='utf-8').read()
 
 # 의존 순서 (앞 모듈이 뒤 모듈을 쓰지 않게)
-ORDER = ['config', 'rng', 'fighter', 'zones', 'spells', 'magic', 'ai', 'assist', 'match', 'gauntlet', 'trials', 'stats', 'models', 'scene', 'fx', 'fxKit', 'elemFx', 'magicView',
+ORDER = ['i18n', 'config', 'rng', 'fighter', 'zones', 'spells', 'magic', 'ai', 'assist', 'match', 'gauntlet', 'trials', 'stats', 'models', 'scene', 'fx', 'fxKit', 'elemFx', 'magicView',
          'vfxEvents', 'view', 'viewport', 'hud', 'input', 'audio', 'postfx', 'assets', 'rigModels', 'venues']
 OURS = re.compile(r"^import \{([^}]*)\} from '\./(\w+)\.js';\s*$", re.M)
 THREE = "import * as THREE from 'three';"
@@ -71,12 +71,12 @@ print(out1, round(os.path.getsize(out1) / 1024), 'KB')
 
 # 웹 링크(Artifact)용: 바깥 틀(doctype/html/head/body)과 charset·viewport 메타는 게시할 때 씌워지므로 뺀다. <title>은 맨 앞으로
 art = html
-for t in ['<!doctype html>', '<html lang="ko">', '<head>', '</head>', '<body>', '</body>', '</html>', '<meta charset="UTF-8"/>',
+for t in ['<!doctype html>', '<html lang="en">', '<head>', '</head>', '<body>', '</body>', '</html>', '<meta charset="UTF-8"/>',
           '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>']:
     assert t in art, t
     art = art.replace(t, '', 1)
-title = re.search(r'<title>.*?</title>\n?', art).group(0)
-art = '<title>마상 마법 난투</title>\n' + art.replace(title, '', 1).strip() + '\n'
+title = re.search(r'<title[^>]*>.*?</title>\n?', art).group(0)
+art = '<title data-en="Mounted Wizard Brawl">마상 마법 난투</title>\n' + art.replace(title, '', 1).strip() + '\n'
 os.makedirs(os.path.join(ROOT, 'docs', 'share'), exist_ok=True)
 out2 = os.path.join(ROOT, 'docs', 'share', 'mw-play-artifact.html')
 open(out2, 'w', encoding='utf-8').write(art)

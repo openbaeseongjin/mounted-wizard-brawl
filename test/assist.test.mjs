@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { makeMatch } from './helpers.mjs';
 import { createAssist } from '../assist.js';
 import { idleInput, dropWeapon } from '../fighter.js';
+import { SPELLS } from '../config.js';
 
 const duo = (spawns, p0 = {}) => makeMatch({ roster: [{ char: 'maji', isPlayer: true, ...p0 }, { char: 'dummy', isPlayer: true }], spawns, props: false });
 const intent = (patch = {}) => ({ move: [0, 0], look: [0, -0.04], cast: false, swing: false, dodge: false, ...patch });
@@ -97,5 +98,5 @@ test('원소: 큰 마법(Q)은 big 입력, 돌풍 금색은 0.5 이상·3.5m 안
   for (let k = 0; k < 56; k++) step({ cast: true });   // 금색은 그 틱 시작의 모은 양으로 본다
   assert.ok(m.fighters[0].charge >= 0.5, 'charge ' + m.fighters[0].charge);
   assert.equal(as.ui.gold, true);
-  assert.equal(as.ui.castLabel, '돌풍'); assert.equal(as.ui.bigLabel, '회오리'); assert.equal(as.ui.bigOk, true);
+  assert.equal(as.ui.castLabel, SPELLS.gust.name); assert.equal(as.ui.bigLabel, SPELLS.tornado.name); assert.equal(as.ui.bigOk, true);
 });

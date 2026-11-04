@@ -1,17 +1,20 @@
 // HUD: 위 피통(정신) + 그 아래 작은 위험 자막, 마력 고리, 충전 고리, 화면 밖 화살표, 맞힘 표시, 피해 숫자, 머리 위 피통, 어지러움, 알림
 import * as THREE from 'three';
 import { CFG, CHARS } from './config.js';
+import { LANG, L } from './i18n.js';
 import { vp, rectToGame } from './viewport.js';
 
 const $ = (id) => document.getElementById(id);
 const C_MANA = 2 * Math.PI * 34, C_CHG = 2 * Math.PI * 26;
-const J = (w, pair) => { const c = w.charCodeAt(w.length - 1) - 0xac00; const has = c >= 0 && c % 28 !== 0; const [a, b] = pair.split('/'); return w + (has ? a : b); };
+const J = (w, pair) => { if (LANG !== 'ko') return w; const c = w.charCodeAt(w.length - 1) - 0xac00; const has = c >= 0 && c % 28 !== 0; const [a, b] = pair.split('/'); return w + (has ? a : b); };
 // 폰에서는 안내 문구의 키 이름을 화면 버튼 이름으로 바꿔 보여 준다
 const TOUCH = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-const TKEY = { E: '타기·줍기', Q: '잡기', C: '찌르기', Space: '숙이기', W: '스틱 ↑', WASD: '스틱', Shift: '질주', V: '시점', Z: '고정', G: '⏸' };
+const TKEY = { E: L('타기·줍기', 'Mount·Pick up'), Q: L('잡기', 'Grab'), C: L('찌르기', 'Thrust'), Space: L('숙이기', 'Duck'), W: L('스틱 ↑', 'Stick ↑'), WASD: L('스틱', 'Stick'), Shift: L('질주', 'Run'), V: L('시점', 'View'), Z: L('고정', 'Lock'), G: '⏸' };
 const tk = (h) => !TOUCH ? h : h.replace(/<kbd>([^<]+)<\/kbd>/g, (m, k) => (TKEY[k] ? `<kbd>${TKEY[k]}</kbd>` : m))
   .replace(/우클릭을 누르고 있다가 떼면/g, '마법 버튼을 누르고 있다가 떼면').replace(/좌클릭을 누른 채 마우스를 휘두르면/g, '휘두르기를 누른 채 화면을 끌면')
-  .replace(/마우스를 앞으로 밀면/g, '화면을 위로 끌면').replace(/ E로/g, ' 줍기 버튼으로').replace(/다가가서 E/g, '다가가서 타기');
+  .replace(/마우스를 앞으로 밀면/g, '화면을 위로 끌면').replace(/ E로/g, ' 줍기 버튼으로').replace(/다가가서 E/g, '다가가서 타기')
+  .replace(/hold right-click(?: and| then) release/gi, (m) => (m[0] === 'H' ? 'Hold the Magic button and release' : 'hold the Magic button and release')).replace(/hold left-click and swing the mouse/gi, (m) => (m[0] === 'H' ? 'Hold Swing and drag the screen' : 'hold Swing and drag the screen'))
+  .replace(/push the mouse forward/g, 'drag the screen up').replace(/ with E\b/g, ' with the Pick-up button').replace(/get close and press E/g, 'get close to mount');
 
 export function createHud() {
   const el = {
@@ -34,7 +37,7 @@ export function createHud() {
     const order = [...m.fighters].sort((a, b) => (b.isPlayer ? 1 : 0) - (a.isPlayer ? 1 : 0));
     for (const f of order) {
       const d = document.createElement('div'); d.className = 'fchip' + (f.isPlayer ? ' me' : '');
-      d.innerHTML = `<i style="background:${f.ch.css}"></i><span class="nm">${f.isPlayer ? '나 (마지)' : f.ch.name}</span><span class="st"></span><div class="hp"><u style="width:100%"></u><b style="width:100%;background:${f.ch.css}"></b><em>100</em></div>`;
+      d.innerHTML = `<i style="background:${f.ch.css}"></i><span class="nm">${f.isPlayer ? L('나 (마지)', 'Me (Maji)') : f.ch.name}</span><span class="st"></span><div class="hp"><u style="width:100%"></u><b style="width:100%;background:${f.ch.css}"></b><em>100</em></div>`;
       el.chips.appendChild(d); chipEls[f.i] = d;
     }
     for (const f of m.fighters) {
@@ -54,16 +57,16 @@ export function createHud() {
     b.style.background = hpCol(hp, css);
   };
   const fmt = (t) => { t = Math.max(0, t); const s = Math.floor(t); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  const gaitOf = (s) => (s < 0.5 ? '정지' : s < 3.5 ? '걷기' : s < 8.5 ? '속보' : s < 12.5 ? '구보' : '질주');
+  const gaitOf = (s) => (s < 0.5 ? L('정지', 'Halt') : s < 3.5 ? L('걷기', 'Walk') : s < 8.5 ? L('속보', 'Trot') : s < 12.5 ? L('구보', 'Canter') : L('질주', 'Gallop'));
 
   function update(m, p, camera, dt, view) {
     // 시계·울타리
     const A = CFG.arena, t = m.t;
     let fence = '';
-    if (t < A.shrinkStart) fence = `울타리가 ${fmt(A.shrinkStart - t)} 뒤에 조여 온다`;
-    else if (t < A.shrinkEnd) fence = `울타리가 조여 온다! 반지름 ${m.fenceR.toFixed(0)}m`;
-    else fence = '울타리 최소 · 공간이 곧 마력';
-    if (t > A.timeLimit - 30) fence = `판정까지 ${fmt(A.timeLimit - t)}`;
+    if (t < A.shrinkStart) fence = L(`울타리가 ${fmt(A.shrinkStart - t)} 뒤에 조여 온다`, `Fence closes in ${fmt(A.shrinkStart - t)}`);
+    else if (t < A.shrinkEnd) fence = L(`울타리가 조여 온다! 반지름 ${m.fenceR.toFixed(0)}m`, `Fence closing! Radius ${m.fenceR.toFixed(0)} m`);
+    else fence = L('울타리 최소 · 공간이 곧 마력', 'Fence at minimum · space is mana');
+    if (t > A.timeLimit - 30) fence = L(`판정까지 ${fmt(A.timeLimit - t)}`, `Judging in ${fmt(A.timeLimit - t)}`);
     if (m.opts.mode === 'practice' || m.opts.mode === 'trial') fence = '';   // 연습장 · 시험: 울타리가 조이지 않는다
     el.timer.firstChild.nodeValue = fmt(t);
     el.timer.querySelector('small').textContent = fence;
@@ -74,7 +77,7 @@ export function createHud() {
       c.querySelector('.st').textContent = icon + (s !== 'ko' && f.rider.conscious < CFG.mind.dizzy ? '💫' : '') + (f.weapon < 0 && s !== 'ko' ? '👊' : '');
       const hp = s === 'ko' ? 0 : f.rider.conscious;
       setBar(c.querySelector('.hp'), hp, f.ch.css);
-      c.querySelector('em').textContent = s === 'ko' ? '기절' : Math.ceil(hp);
+      c.querySelector('em').textContent = s === 'ko' ? L('기절', 'KO') : Math.ceil(hp);
       c.classList.toggle('out', f.out); c.classList.toggle('low', !f.out && hp < 25);
     });
     // 속도·마력·공포
@@ -83,14 +86,14 @@ export function createHud() {
       const h = m.horses[p.horse];
       el.gait.textContent = gaitOf(h.speed); el.spd.textContent = h.speed.toFixed(1) + ' m/s';
       const fr = h.fear;
-      el.fear.textContent = `${h.def.name} ${fr > 70 ? '😱 겁먹음' : fr > 40 ? '😟 불안' : '😌 침착'} · ${h.winded ? '숨참! 질주 불가' : '숨 ' + Math.round(h.stam) + '%'}`;
+      el.fear.textContent = `${h.def.name} ${fr > 70 ? L('😱 겁먹음', '😱 Spooked') : fr > 40 ? L('😟 불안', '😟 Uneasy') : L('😌 침착', '😌 Calm')} · ${h.winded ? L('숨참! 질주 불가', 'Winded! No sprint') : L('숨 ', 'Breath ') + Math.round(h.stam) + '%'}`;
       el.fear.style.color = h.winded || fr > 70 ? '#ff7a6a' : fr > 40 || h.stam < 35 ? '#ffd34d' : '#bff2c4';
     } else {
-      el.gait.textContent = p.rider.state === 'ko' ? '기절' : p.rider.state === 'foot' ? '도보' : '낙마!';
+      el.gait.textContent = p.rider.state === 'ko' ? L('기절', 'KO') : p.rider.state === 'foot' ? L('도보', 'On foot') : L('낙마!', 'Unhorsed!');
       const vv = p.rider.body.linvel(); el.spd.textContent = Math.hypot(vv.x, vv.z).toFixed(1) + ' m/s';
-      el.fear.textContent = '말이 없으면 마력도 없다'; el.fear.style.color = '#ffd34d';
+      el.fear.textContent = L('말이 없으면 마력도 없다', 'No horse, no mana'); el.fear.style.color = '#ffd34d';
     }
-    el.mana.textContent = '마력 ' + E;
+    el.mana.textContent = L('마력 ', 'Mana ') + E;
     el.manaArc.setAttribute('stroke-dasharray', `${(Ef * C_MANA).toFixed(1)} 999`);
     el.manaArc.setAttribute('stroke', Ef > 0.75 ? '#ffffff' : Ef > 0.4 ? '#9fe8ff' : '#5fb8d8');
     const cf = p.charging ? p.charge / CFG.spell.fMax : 0;
@@ -136,27 +139,27 @@ export function createHud() {
       // 나를 노리는가: 충전 중이고 조준이 나를 향함, 또는 빠르게 정면 돌진, 또는 나를 잡음
       const nm = f.ch.name;
       let aimed = false;
-      if (f.charging && f.charge > 0.1 && d < 40) { const dd = (f.aimDir.x * dx + f.aimDir.z * dz) / d; if (dd > 0.97) { aimed = true; alerts.push(['r', `⚠ ${nm} 마법 조준 중 (${Math.round(f.charge / CFG.spell.fMax * 100)}%)`]); } }
-      if (f.horse >= 0 && d < 22) { const h = m.horses[f.horse], fw = { x: Math.sin(h.heading), z: Math.cos(h.heading) }; if (h.speed > 9 && (fw.x * dx + fw.z * dz) / d > 0.93) { aimed = true; alerts.push(['r', `⚠ ${nm} 돌진해 온다${f.input.thrust ? ' (찌르기!)' : ''}`]); } }
-      if (f.grab && f.grab.kind === 'rider' && f.grab.i === p.i) alerts.push(['r', `✋ ${J(nm, '이/가')} 나를 잡았다! 멀어지면 끌려 떨어진다`]);
+      if (f.charging && f.charge > 0.1 && d < 40) { const dd = (f.aimDir.x * dx + f.aimDir.z * dz) / d; if (dd > 0.97) { aimed = true; alerts.push(['r', L(`⚠ ${nm} 마법 조준 중 (${Math.round(f.charge / CFG.spell.fMax * 100)}%)`, `⚠ ${nm} is aiming a spell (${Math.round(f.charge / CFG.spell.fMax * 100)}%)`)]); } }
+      if (f.horse >= 0 && d < 22) { const h = m.horses[f.horse], fw = { x: Math.sin(h.heading), z: Math.cos(h.heading) }; if (h.speed > 9 && (fw.x * dx + fw.z * dz) / d > 0.93) { aimed = true; alerts.push(['r', L(`⚠ ${nm} 돌진해 온다${f.input.thrust ? ' (찌르기!)' : ''}`, `⚠ ${nm} is charging you${f.input.thrust ? ' (thrust!)' : ''}`)]); } }
+      if (f.grab && f.grab.kind === 'rider' && f.grab.i === p.i) alerts.push(['r', L(`✋ ${J(nm, '이/가')} 나를 잡았다! 멀어지면 끌려 떨어진다`, `✋ ${nm} grabbed you! Pull away and you get dragged off`)]);
       if (aimed) warnSide = onScreen ? 'front' : (x < 0 ? 'left' : 'right');
     });
     // 내 상태 위험 자막
     const rs = p.rider.state;
     if (rs === 'mounted') {
       const q = p.rider.body.rotation(), upY = 1 - 2 * (q.x * q.x + q.z * q.z);
-      if (!p.input.duck && upY < Math.cos(30 * Math.PI / 180)) alerts.push(['r', '⚠ 몸이 기울었다 — 떨어지기 직전 (Space 숙이기)']);
+      if (!p.input.duck && upY < Math.cos(30 * Math.PI / 180)) alerts.push(['r', L('⚠ 몸이 기울었다 — 떨어지기 직전 (Space 숙이기)', '⚠ Leaning — about to fall (Space to duck)')]);
       const h = m.horses[p.horse];
-      if (h.fear > 70) alerts.push(['o', `😱 ${J(h.def.name, '이/가')} 겁먹었다 — 날뛸 수 있다`]);
-      if (h.winded) alerts.push(['o', '😮‍💨 말이 숨참 — 질주 불가']);
-      else if (h.stam < 25) alerts.push(['y', `말 숨 ${Math.round(h.stam)}%`]);
+      if (h.fear > 70) alerts.push(['o', L(`😱 ${J(h.def.name, '이/가')} 겁먹었다 — 날뛸 수 있다`, `😱 ${h.def.name} is spooked — it may buck`)]);
+      if (h.winded) alerts.push(['o', L('😮‍💨 말이 숨참 — 질주 불가', '😮‍💨 Horse winded — no sprint')]);
+      else if (h.stam < 25) alerts.push(['y', L(`말 숨 ${Math.round(h.stam)}%`, `Horse breath ${Math.round(h.stam)}%`)]);
     }
-    if (rs !== 'ko' && p.rider.conscious < CFG.mind.dizzy) alerts.push(['r', '💫 어지러움 — 한두 대 더 맞으면 기절']);
-    if (p.stam < 15 && rs !== 'ko') alerts.push(['o', '기운 바닥 — 힘이 빠진다']);
-    if (p.weapon < 0 && rs !== 'ko') alerts.push(['y', '👊 맨손 (마법 불가)']);
-    if (rs === 'foot' || rs === 'getup') alerts.push(['y', '말에서 떨어짐 — 말발굽 조심']);
+    if (rs !== 'ko' && p.rider.conscious < CFG.mind.dizzy) alerts.push(['r', L('💫 어지러움 — 한두 대 더 맞으면 기절', '💫 Dizzy — one or two more hits and you are out')]);
+    if (p.stam < 15 && rs !== 'ko') alerts.push(['o', L('기운 바닥 — 힘이 빠진다', 'Out of energy — you are weakening')]);
+    if (p.weapon < 0 && rs !== 'ko') alerts.push(['y', L('👊 맨손 (마법 불가)', '👊 Bare hands (no spells)')]);
+    if (rs === 'foot' || rs === 'getup') alerts.push(['y', L('말에서 떨어짐 — 말발굽 조심', 'Unhorsed — watch the hooves')]);
     const fr = Math.hypot(me.x, me.z);
-    if (m.t > A.shrinkStart && m.t < A.shrinkEnd && fr > m.fenceR - 4) alerts.push(['y', '울타리가 다가온다']);
+    if (m.t > A.shrinkStart && m.t < A.shrinkEnd && fr > m.fenceR - 4) alerts.push(['y', L('울타리가 다가온다', 'The fence is closing in')]);
     const pri = { r: 0, o: 1, y: 2 };
     alerts.sort((a, b) => pri[a[0]] - pri[b[0]]);
     const shown = alerts.slice(0, 4), key = shown.map((s) => s[0] + s[1]).join('|');
@@ -185,8 +188,8 @@ export function createHud() {
     el.stamArc.setAttribute('stroke', p.stam < 20 ? '#ff7a6a' : p.stam < 45 ? '#ffd34d' : '#9be37a');
     // 자세 표시 (위험이 아닌 것만 조준점 아래에)
     const tags = [];
-    if (p.input.thrust) tags.push('[찌르기 자세] 마우스를 앞으로 밀어 찌른다');
-    if (p.grab) tags.push('✋ 잡는 중! 멀어지면 끌어내린다');
+    if (p.input.thrust) tags.push(L('[찌르기 자세] 마우스를 앞으로 밀어 찌른다', '[Thrust stance] push the mouse forward to stab'));
+    if (p.grab) tags.push(L('✋ 잡는 중! 멀어지면 끌어내린다', '✋ Grabbing! Pull away to drag them off'));
     el.modeTag.textContent = tags.join('   ');
     // 피해 방향 고리, 피해 숫자
     dirV = Math.max(0, dirV - dt * 1.4); el.dmgDir.style.opacity = dirV;
@@ -211,8 +214,8 @@ export function createHud() {
         weaponShown = true;
         const mounted = p.rider.state === 'mounted', range = mounted ? CFG.pickup.mounted : CFG.pickup.foot;
         const slow = !mounted || m.horses[p.horse].speed <= CFG.pickup.mountedSpeed;
-        el.weaponHint.innerHTML = tk(bd < range && slow ? `<kbd>E</kbd> ${best.item.name} 줍기<small>${mounted ? '말 위에서 몸을 숙여 줍는다' : '남의 지팡이도 주울 수 있다'}</small>`
-          : `맨손! 가장 가까운 지팡이까지 ${bd.toFixed(0)}m<small>${mounted && bd < range ? '말을 세우면(속도 5 이하) E로 줍는다' : '지팡이가 없으면 마법을 못 쓴다 · 주먹은 휘두르기로'}</small>`);
+        el.weaponHint.innerHTML = tk(bd < range && slow ? L(`<kbd>E</kbd> ${best.item.name} 줍기<small>${mounted ? '말 위에서 몸을 숙여 줍는다' : '남의 지팡이도 주울 수 있다'}</small>`, `<kbd>E</kbd> Pick up ${best.item.name}<small>${mounted ? 'You lean down from the saddle' : 'You can pick up other riders\' staffs too'}</small>`)
+          : L(`맨손! 가장 가까운 지팡이까지 ${bd.toFixed(0)}m<small>${mounted && bd < range ? '말을 세우면(속도 5 이하) E로 줍는다' : '지팡이가 없으면 마법을 못 쓴다 · 주먹은 휘두르기로'}</small>`, `Bare hands! Nearest staff ${bd.toFixed(0)} m away<small>${mounted && bd < range ? 'Slow the horse (speed 5 or less) and press <kbd>E</kbd> to pick up' : 'No staff, no spells · fists swing with the swing button'}</small>`));
       }
     }
     el.weaponHint.classList.toggle('hidden', !weaponShown);
@@ -221,9 +224,9 @@ export function createHud() {
       let best = null, bd = 1e9;
       for (const h of m.horses) { if (h.rider >= 0) continue; const hp = h.body.translation(), d = Math.hypot(hp.x - me.x, hp.z - me.z); if (d < bd) { bd = d; best = h; } }
       el.mountHint.classList.remove('hidden');
-      if (!best) el.mountHint.innerHTML = '빈 말이 없다!<small>걸어서 지팡이로 싸워라 (말에 밟히지 않게)</small>';
-      else if (bd < CFG.rider.mountDist + 0.6 && best.speed < CFG.rider.mountSpeed) el.mountHint.innerHTML = tk('<kbd>E</kbd> 말에 타기<small>' + best.def.name + '</small>');
-      else el.mountHint.innerHTML = tk(`빈 말까지 ${bd.toFixed(0)}m<small>${best.panicT > 0 ? '겁에 질려 달아나는 중… 멈출 때까지 기다려' : '다가가서 E'}</small>`);
+      if (!best) el.mountHint.innerHTML = L('빈 말이 없다!<small>걸어서 지팡이로 싸워라 (말에 밟히지 않게)</small>', 'No free horse!<small>Fight on foot with your staff (stay clear of hooves)</small>');
+      else if (bd < CFG.rider.mountDist + 0.6 && best.speed < CFG.rider.mountSpeed) el.mountHint.innerHTML = tk(L('<kbd>E</kbd> 말에 타기<small>', '<kbd>E</kbd> Mount<small>') + best.def.name + '</small>');
+      else el.mountHint.innerHTML = tk(L(`빈 말까지 ${bd.toFixed(0)}m<small>${best.panicT > 0 ? '겁에 질려 달아나는 중… 멈출 때까지 기다려' : '다가가서 E'}</small>`, `Free horse ${bd.toFixed(0)} m away<small>${best.panicT > 0 ? 'Bolting in fear… wait until it stops' : 'Get close and press <kbd>E</kbd>'}</small>`));
     } else el.mountHint.classList.add('hidden');
     // 시간 지나면 사라지는 것들
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) el.toast.style.opacity = 0; }
@@ -274,7 +277,7 @@ export function createHud() {
       t.style.width = t.style.height = size + 'px';
       t.style.transform = `translate(${(v.x * 0.5 + 0.5) * vp.w - size / 2}px,${(-v.y * 0.5 + 0.5) * vp.h - size / 2}px)`;
       const cls = ui.gold && busy ? 'gold' : busy ? ui.mode : '';
-      if (t.className !== cls) { t.className = cls; t.lastChild.textContent = cls === 'gold' ? '떼기!' : ''; }
+      if (t.className !== cls) { t.className = cls; t.lastChild.textContent = cls === 'gold' ? L('떼기!', 'Release!') : ''; }
     },
     legend(on) { el.legend.classList.toggle('hidden', !on); },
     // 전직 시험 안내판: info = { tag, title, goal } 또는 null

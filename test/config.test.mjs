@@ -16,8 +16,8 @@ test('슬롯: 견습 = 마력탄, 1차 = 첫 마법, 2차 = 둘 다', () => {
 
 test('AI 원소와 돌쇠', () => {
   assert.equal(CHARS.mukjik.job, 'wind'); assert.equal(CHARS.beongae.job, 'fire'); assert.equal(CHARS.gihoe.job, 'water');
-  assert.equal(CHARS.boss1.name, '마구간 대장 돌쇠'); assert.equal(CHARS.boss1.job, 'earth'); assert.equal(CHARS.boss1.jobTier, 2);
+  assert.ok(CHARS.boss1.name.length > 0); assert.equal(CHARS.boss1.job, 'earth'); assert.equal(CHARS.boss1.jobTier, 2);
   assert.equal(CHARS.rival.job, 'mimic');
-  assert.equal(LADDER[0].boss.line[0], '돌쇠');
+  assert.ok(CHARS.boss1.name.includes(LADDER[0].boss.line[0]));   // 말하는 사람 이름 = 돌쇠 / Dolsoe (어느 언어든 보스 이름에 들어 있다)
   for (const p of ['circle', 'rush', 'swarm', 'flee']) assert.ok(PERSONAS[p].mode, p);
 });
